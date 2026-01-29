@@ -1,7 +1,9 @@
-streamlit>=1.28.0
-qiskit>=0.45.0
-qiskit-aer>=0.13.0
-numpy>=1.24.0
-matplotlib>=3.7.0
-scipy>=1.11.0
-cvxpy>=1.4.0
+qiskit
+qiskit-aer
+numpy
+matplotlib
+streamlit
+cvxpy
+scs
+ecos
+pyqsp

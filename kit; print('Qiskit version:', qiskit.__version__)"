@@ -1,0 +1,5 @@
+Help on function __init__ in module qiskit.circuit.library.basis_change.qft:
+
+____iinniitt____(self, num_qubits: 'int')
+    Args:
+        num_qubits: The number of qubits on which the QFT acts.

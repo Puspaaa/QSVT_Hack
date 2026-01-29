@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from simulation import run_split_step_sim_exponential, exact_solution_fourier, get_classical_matrix
+from simulation import run_split_step_sim, exact_solution_fourier, get_classical_matrix
 
 st.set_page_config(page_title="Quantum Wind Tunnel", layout="wide")
 st.title("🌊 Quantum Advection-Diffusion Simulator")
@@ -17,6 +17,7 @@ with st.sidebar:
     
     st.header("3. Simulation")
     t_max = st.slider("Max Time Steps", 10, 100, 30, step=10)
+    shots = st.number_input("Number of Shots", min_value=10000, max_value=500000, value=200000, step=50000)
     
     run_btn = st.button("🚀 Run Quantum Circuit", type="primary")
 
@@ -25,10 +26,10 @@ if run_btn:
     with st.spinner("Compiling Quantum Circuits..."):
         # Setup Initial Condition
         u0_func = lambda x: np.exp(-100 * (x - 0.3)**2)
-        steps = [0, int(t_max/2), t_max]
+        steps = [0, int(t_max/4), int(t_max/2), int(3*t_max/4), t_max]
         
         # 1. Run Quantum Simulation
-        results = run_split_step_sim_exponential(n_qubits, nu, c, steps, u0_func, shots=50000)
+        results = run_split_step_sim(n_qubits, nu, c, steps, u0_func, shots=shots)
         
         # 2. Prepare Plot
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -39,17 +40,26 @@ if run_btn:
         u0_vals = u0_func(x_grid)
         A_matrix, dt = get_classical_matrix(N, nu, c)
         
+        # Track classical evolution incrementally (like notebook)
+        v_classical = u0_vals.copy()
+        current_step = 0
+        
         for i, t in enumerate(steps):
             col = colors[i]
-            # Exact
+            
+            # Exact Analytical Solution
             phys_time = t * dt
             y_exact = exact_solution_fourier(u0_vals, phys_time, nu, c)
             ax.plot(x_grid, y_exact, color=col, linestyle='-', alpha=0.4, lw=2, label=f"Exact (t={t})")
             
-            # Classical Matrix (Dotted)
-            v_class = np.linalg.matrix_power(A_matrix, t) @ u0_vals
-            v_class = v_class / np.linalg.norm(v_class)
-            ax.plot(x_grid, v_class, color=col, linestyle=':', alpha=0.8, label=f"Classical Matrix")
+            # Classical Matrix (Incremental Evolution)
+            steps_to_take = t - current_step
+            if steps_to_take > 0:
+                A_gap = np.linalg.matrix_power(A_matrix, steps_to_take)
+                v_classical = A_gap @ v_classical
+                current_step = t
+            y_class = v_classical / np.linalg.norm(v_classical)
+            ax.plot(x_grid, y_class, color=col, linestyle='--', alpha=0.7, linewidth=1.5, label=f"Classical Matrix")
             
             # Quantum (Dots)
             if t in results:
