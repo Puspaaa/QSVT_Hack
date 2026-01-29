@@ -57,7 +57,7 @@ def compute_qsvt_polynomial_coefficients(
     
     # Solve the optimization problem
     prob = cp.Problem(objective, constraints)
-    prob.solve(solver=cp.ECOS, verbose=False)
+    prob.solve(verbose=False)
     
     if prob.status not in ["optimal", "optimal_inaccurate"]:
         # If optimization fails, return identity coefficients
@@ -156,7 +156,7 @@ def optimize_phase_factors(
     # Solve
     prob = cp.Problem(objective, constraints)
     try:
-        prob.solve(solver=cp.ECOS, verbose=False)
+        prob.solve(verbose=False)
         if prob.status in ["optimal", "optimal_inaccurate"]:
             return phases.value
     except:
