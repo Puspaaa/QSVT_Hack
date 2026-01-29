@@ -37,13 +37,26 @@ where:
 
 ```
 QSVT_Hack/
-├── app.py           # Main Streamlit UI with tabs and controls
-├── simulation.py    # Comparison logic and plotting functions
-├── quantum.py       # Qiskit quantum circuit implementations
-├── solvers.py       # CVXPY optimization for polynomial coefficients
-├── requirements.txt # Python dependencies
-└── README.md        # This file
+├── app.py                           # Home/landing page (entry point)
+├── pages/
+│   ├── 1_1D_Simulation.py           # 1D Advection-Diffusion simulation
+│   └── 2_2D_Simulation.py           # 2D Diffusion-Advection simulation (in development)
+├── simulation.py                    # 1D PDE simulation logic
+├── quantum.py                       # Quantum circuit definitions
+├── solvers.py                       # Polynomial solving and angle computation
+├── requirements.txt                 # Python dependencies
+└── README.md                        # This file
 ```
+
+### Multi-Page Structure
+
+This Streamlit app uses the multi-page feature to organize different simulations:
+
+1. **Home Page** (`app.py`) - Overview of the QSVT algorithm and navigation
+2. **1D Simulation** (`pages/1_1D_Simulation.py`) - Full 1D advection-diffusion solver ✅ Complete
+3. **2D Simulation** (`pages/2_2D_Simulation.py`) - 2D PDE solver (under development)
+
+Use the sidebar to navigate between pages in Streamlit.
 
 ## Installation
 
