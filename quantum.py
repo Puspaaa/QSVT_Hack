@@ -1,289 +1,91 @@
-"""
-Quantum circuit implementations for advection-diffusion simulation using QSVT.
-Includes diffusion block encoding, advection gate, and QSVT circuit construction.
-"""
-
 import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-from qiskit.circuit.library import QFT
-from typing import List, Tuple, Optional
-from solvers import compute_qsvt_polynomial_coefficients, optimize_phase_factors
+from qiskit.circuit.library import QFTGate, DiagonalGate
 
+class Shift_gate(QuantumCircuit):
+    def __init__(self, n, inverse=False):
+        super().__init__(n, name="Shift" if not inverse else "Shift_dag")
+        self.append(QFTGate(n, do_swaps=False), range(n))
+        for i in range(n):
+            phase = 2 * np.pi * (2**i) / (2**n)
+            if inverse: phase *= -1
+            self.p(phase, i)
+        self.append(QFTGate(n, do_swaps=False).inverse(), range(n))
 
-def create_diffusion_block_encoding(
-    n_qubits: int,
-    viscosity: float,
-    dt: float = 0.1
-) -> QuantumCircuit:
-    """
-    Create a block-encoded quantum circuit for the diffusion operator.
+def Block_encoding_diffusion(n, nu):
+    ancilla = QuantumRegister(2, 'anc')
+    data = QuantumRegister(n, 'data')
+    qc = QuantumCircuit(ancilla, data)
+
+    dx = 1/2**n
+    dt = 0.9*dx**2/(2*nu)
+    a_val = 1 - 2*dt*nu/(dx**2)
+    theta = 2 * np.arccos(np.sqrt(a_val))
+
+    qc.ry(theta, ancilla[1])
+    qc.ch(ancilla[1], ancilla[0])
+
+    S = Shift_gate(n).to_gate()
+    S_dag = S.inverse()
     
-    The diffusion operator is exp(-ν * dt * ∂²/∂x²), which is diagonal
-    in Fourier space with eigenvalues exp(-ν * dt * k²).
-    
-    Args:
-        n_qubits: Number of qubits for spatial discretization
-        viscosity: Diffusion coefficient ν
-        dt: Time step
-    
-    Returns:
-        Quantum circuit implementing block-encoded diffusion
-    """
-    qc = QuantumCircuit(n_qubits, name='Diffusion')
-    
-    # Apply QFT to go to Fourier space
-    qc.append(QFT(n_qubits, do_swaps=True), range(n_qubits))
-    
-    # Apply phase rotations for diffusion
-    # In Fourier space: exp(-ν * dt * k²)
-    N = 2 ** n_qubits
-    for k_idx in range(N):
-        # Wave number
-        k = 2 * np.pi * (k_idx if k_idx < N//2 else k_idx - N) / N
-        
-        # Phase from diffusion: -ν * dt * k²
-        phase = -viscosity * dt * k**2
-        
-        # Apply controlled phase rotation
-        # We need to apply this phase when the state is |k_idx⟩
-        if abs(phase) > 1e-10:  # Only if significant
-            _apply_controlled_phase_to_basis_state(qc, k_idx, phase, n_qubits)
-    
-    # Apply inverse QFT to return to position space
-    qc.append(QFT(n_qubits, do_swaps=True).inverse(), range(n_qubits))
-    
+    qc.append(S_dag.control(2, ctrl_state='10'), ancilla[:] + data[:])
+    qc.append(S.control(2, ctrl_state='11'), ancilla[:] + data[:])
+
+    qc.ch(ancilla[1], ancilla[0])
+    qc.ry(-theta, ancilla[1])
     return qc
 
-
-def create_advection_gate(
-    n_qubits: int,
-    velocity: float,
-    dt: float = 0.1
-) -> QuantumCircuit:
-    """
-    Create a quantum gate for the advection (shift) operator.
+def Advection_Gate(n, c, physical_time):
+    qc = QuantumCircuit(n, name="Advection")
+    qc.append(QFTGate(n, do_swaps=False), range(n))
     
-    The advection operator is exp(-v * dt * ∂/∂x), which in Fourier space
-    becomes exp(-i * v * dt * k), representing a translation.
+    N = 2**n
+    shift_distance = c * physical_time
+    diagonals = []
     
-    Args:
-        n_qubits: Number of qubits
-        velocity: Advection velocity v
-        dt: Time step
-    
-    Returns:
-        Quantum circuit implementing advection
-    """
-    qc = QuantumCircuit(n_qubits, name='Advection')
-    
-    # Apply QFT to go to Fourier space
-    qc.append(QFT(n_qubits, do_swaps=True), range(n_qubits))
-    
-    # Apply phase rotations for advection
-    # In Fourier space: exp(-i * v * dt * k)
-    N = 2 ** n_qubits
-    for k_idx in range(N):
-        # Wave number
-        k = 2 * np.pi * (k_idx if k_idx < N//2 else k_idx - N) / N
+    for j in range(N):
+        k = j if j < N/2 else j - N
+        angle = 2 * np.pi * k * shift_distance 
+        diagonals.append(np.exp(1j * angle))
         
-        # Phase from advection: -v * dt * k
-        phase = -velocity * dt * k
-        
-        # Apply phase rotation
-        if abs(phase) > 1e-10:
-            _apply_controlled_phase_to_basis_state(qc, k_idx, phase, n_qubits)
-    
-    # Apply inverse QFT to return to position space
-    qc.append(QFT(n_qubits, do_swaps=True).inverse(), range(n_qubits))
-    
-    return qc
+    qc.append(DiagonalGate(diagonals), range(n))
+    qc.append(QFTGate(n, do_swaps=False).inverse(), range(n))
+    return qc.to_gate(label=f"Adv(t={physical_time:.3f})")
 
+def QSVT_circuit_universal(phi_seq, n, nu, init_state=None, measurement=True):
+    sig = QuantumRegister(1, 'sig')
+    anc = QuantumRegister(2, 'anc')
+    dat = QuantumRegister(n, 'dat')
+    c_sig = ClassicalRegister(1, 'm_sig')
+    c_anc = ClassicalRegister(2, 'm_anc')
+    c_dat = ClassicalRegister(n, 'm_dat')
+    
+    qc = QuantumCircuit(sig, anc, dat, c_sig, c_anc, c_dat)
+    U_gate = Block_encoding_diffusion(n, nu).to_gate(label="U_Diff")
+    U_dag = U_gate.inverse()
+    
+    if init_state is not None: qc.initialize(init_state, dat)
+    qc.barrier()
 
-def _apply_controlled_phase_to_basis_state(
-    qc: QuantumCircuit,
-    basis_state: int,
-    phase: float,
-    n_qubits: int
-) -> None:
-    """
-    Apply a phase to a specific computational basis state.
-    
-    Uses multi-controlled phase gates to target a specific basis state |basis_state⟩.
-    
-    Args:
-        qc: Quantum circuit to modify
-        basis_state: Index of basis state to apply phase to
-        phase: Phase angle in radians
-        n_qubits: Number of qubits
-    """
-    # Convert basis state to binary
-    binary = format(basis_state, f'0{n_qubits}b')
-    
-    # Apply X gates to flip qubits where bit is 0
-    for i, bit in enumerate(binary):
-        if bit == '0':
-            qc.x(i)
-    
-    # Apply multi-controlled phase gate
-    if n_qubits == 1:
-        qc.p(phase, 0)
-    elif n_qubits == 2:
-        qc.cp(phase, 0, 1)
+    qc.h(sig)
+    qc.rz(2 * phi_seq[0], sig)
+    qc.barrier()
+
+    for i in range(1, len(phi_seq)):
+        gate = U_gate if i % 2 == 1 else U_dag
+        qc.append(gate, anc[:] + dat[:])
+        qc.x(anc)
+        qc.ccx(anc[0], anc[1], sig)
+        qc.rz(2 * phi_seq[i], sig)
+        qc.ccx(anc[0], anc[1], sig)
+        qc.x(anc)
+        qc.barrier()
+
+    if measurement:
+        qc.h(sig)
+        qc.measure(sig, c_sig)
+        qc.measure(anc, c_anc)
+        qc.measure(dat, c_dat)
     else:
-        # For more qubits, use multi-controlled phase
-        # Simplification: apply phase to each qubit
-        control_qubits = list(range(n_qubits - 1))
-        target_qubit = n_qubits - 1
-        qc.mcp(phase, control_qubits, target_qubit)
-    
-    # Undo X gates
-    for i, bit in enumerate(binary):
-        if bit == '0':
-            qc.x(i)
-
-
-def create_qsvt_circuit(
-    n_qubits: int,
-    block_encoding: QuantumCircuit,
-    phase_factors: np.ndarray
-) -> QuantumCircuit:
-    """
-    Create a QSVT (Quantum Singular Value Transformation) circuit.
-    
-    QSVT applies a polynomial transformation to the singular values of
-    a block-encoded matrix using a sequence of phase factors.
-    
-    Args:
-        n_qubits: Number of qubits
-        block_encoding: Block-encoded operator circuit
-        phase_factors: Array of phase factors for QSVT
-    
-    Returns:
-        QSVT quantum circuit
-    """
-    # Create circuit with ancilla qubit for block encoding
-    qreg = QuantumRegister(n_qubits, 'q')
-    anc = QuantumRegister(1, 'anc')
-    qc = QuantumCircuit(qreg, anc, name='QSVT')
-    
-    n_phases = len(phase_factors)
-    
-    # QSVT sequence: alternate between signal operator and projector-controlled phases
-    for i in range(n_phases):
-        # Apply signal operator (block encoding)
-        if i > 0:
-            # Controlled application on ancilla
-            controlled_block = block_encoding.control(1)
-            qc.append(controlled_block, [anc[0]] + list(qreg))
-        
-        # Apply projector-controlled phase
-        # This implements: e^{iφ_i |0⟩⟨0|}
-        qc.p(phase_factors[i], anc[0])
-        
-        # Apply X gate on ancilla to flip projector
-        qc.x(anc[0])
-        qc.p(-phase_factors[i], anc[0])
-        qc.x(anc[0])
-    
+        qc.h(sig)
     return qc
-
-
-def create_combined_advection_diffusion_circuit(
-    n_qubits: int,
-    viscosity: float,
-    velocity: float,
-    n_steps: int = 1,
-    dt: float = 0.1,
-    use_qsvt: bool = False
-) -> QuantumCircuit:
-    """
-    Create a combined circuit for advection-diffusion using split-step method.
-    
-    Args:
-        n_qubits: Number of qubits
-        viscosity: Diffusion coefficient
-        velocity: Advection velocity
-        n_steps: Number of time steps to simulate
-        dt: Time step size
-        use_qsvt: Whether to use QSVT enhancement
-    
-    Returns:
-        Combined quantum circuit
-    """
-    qc = QuantumCircuit(n_qubits, name='AdvectionDiffusion')
-    
-    # Create component circuits
-    diffusion_circ = create_diffusion_block_encoding(n_qubits, viscosity, dt)
-    advection_circ = create_advection_gate(n_qubits, velocity, dt)
-    
-    # Split-step evolution: alternate diffusion and advection
-    for step in range(n_steps):
-        # Half step diffusion
-        qc.append(diffusion_circ, range(n_qubits))
-        
-        # Full step advection
-        qc.append(advection_circ, range(n_qubits))
-        
-        # Half step diffusion
-        qc.append(diffusion_circ, range(n_qubits))
-    
-    if use_qsvt:
-        # Optionally wrap in QSVT for enhanced precision
-        # Compute phase factors
-        degree = min(10, 2 * n_qubits)
-        phase_factors = optimize_phase_factors(
-            n_phases=degree,
-            target_singular_values=np.linspace(-1, 1, 50)
-        )
-        
-        # Create QSVT circuit
-        qsvt_circ = create_qsvt_circuit(n_qubits, qc, phase_factors)
-        return qsvt_circ
-    
-    return qc
-
-
-def simulate_quantum_advection_diffusion(
-    n_qubits: int,
-    initial_state: np.ndarray,
-    viscosity: float,
-    velocity: float,
-    time_points: np.ndarray
-) -> np.ndarray:
-    """
-    Simulate advection-diffusion using quantum circuits.
-    
-    Args:
-        n_qubits: Number of qubits
-        initial_state: Initial state vector (length 2^n_qubits)
-        viscosity: Diffusion coefficient
-        velocity: Advection velocity
-        time_points: Array of time points to evaluate
-    
-    Returns:
-        Array of states at each time point (shape: [len(time_points), 2^n_qubits])
-    """
-    from qiskit_aer import AerSimulator
-    from qiskit.quantum_info import Statevector
-    
-    N = 2 ** n_qubits
-    results = np.zeros((len(time_points), N), dtype=complex)
-    results[0] = initial_state
-    
-    # Simulate evolution
-    for i, t in enumerate(time_points[1:], start=1):
-        dt = t - time_points[i-1]
-        
-        # Create circuit for this time step
-        qc = create_combined_advection_diffusion_circuit(
-            n_qubits, viscosity, velocity, n_steps=1, dt=dt
-        )
-        
-        # Initialize with previous state
-        state = Statevector(results[i-1])
-        state = state.evolve(qc)
-        
-        # Store result
-        results[i] = state.data
-    
-    return np.abs(results) ** 2  # Return probabilities
