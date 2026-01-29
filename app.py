@@ -28,10 +28,11 @@ $$u_0 \xrightarrow{\text{Block-encode }A} \text{QSVT } P(A) \xrightarrow{\text{A
 
 Use the sidebar to open:
 
-- 1D advection–diffusion
-- 2D advection–diffusion
+- 1D advection–diffusion (PDE solver)
+- 2D advection–diffusion (PDE solver)
+- Problem 2: Integral Estimation (quantum measurement)
 
-Each page follows: PDE → block-encoding → QSVT circuit → angles → simulation.
+Each page follows: theory → configuration → computation → results.
 """)
 
 st.markdown("---")
