@@ -39,5 +39,5 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# Streamlit
-.streamlit/
+# Streamlit secrets only (keep config.toml)
+.streamlit/secrets.toml
