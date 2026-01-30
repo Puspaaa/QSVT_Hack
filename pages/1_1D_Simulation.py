@@ -107,74 +107,89 @@ with col1:
 with col2:
     st.markdown("**Block Encoding Circuit (LCU):**")
     
-    # Custom matplotlib circuit diagram
-    fig_block, ax_block = plt.subplots(figsize=(7, 4))
-    ax_block.set_xlim(0, 12)
-    ax_block.set_ylim(-0.5, 5.5)
+    # Custom matplotlib circuit diagram matching actual implementation
+    fig_block, ax_block = plt.subplots(figsize=(8, 5))
+    ax_block.set_xlim(0, 14)
+    ax_block.set_ylim(-0.5, 6.5)
     ax_block.axis('off')
     
     # Draw qubit lines
-    labels = ['$|0\\rangle$ anc₁', '$|0\\rangle$ anc₀', '$|\\psi\\rangle$ data']
-    y_positions = [4, 3, 1]  # data register shown as single line for clarity
+    labels = ['$ancilla_0$', '$ancilla_1$', '$data_0$', '$data_1$', '$data_2$', '$data_3$']
+    y_positions = [5, 4, 3, 2, 1, 0]
     
-    for i, (label, y) in enumerate(zip(labels, y_positions)):
-        ax_block.hlines(y, 1, 11, colors='black', linewidth=1.5)
-        ax_block.text(0.3, y, label, fontsize=9, ha='right', va='center')
+    for label, y in zip(labels, y_positions):
+        ax_block.hlines(y, 1.5, 12.5, colors='black', linewidth=1.5)
+        ax_block.text(1.2, y, label, fontsize=9, ha='right', va='center', style='italic')
     
-    # Draw data register as multiple lines (visually bundled)
-    ax_block.hlines(1.3, 1, 11, colors='black', linewidth=0.5, linestyle='--', alpha=0.5)
-    ax_block.hlines(0.7, 1, 11, colors='black', linewidth=0.5, linestyle='--', alpha=0.5)
-    ax_block.text(0.5, 1, f'({n_qubits})', fontsize=7, ha='center', va='center', color='gray')
+    # H gate on ancilla_0
+    rect_h1 = plt.Rectangle((2.0, 4.7), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
+    ax_block.add_patch(rect_h1)
+    ax_block.text(2.3, 5, 'H', fontsize=10, ha='center', va='center', fontweight='bold')
     
-    # Prepare block - H gates
-    for y in [4, 3]:
-        rect = plt.Rectangle((1.5, y-0.3), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
-        ax_block.add_patch(rect)
-        ax_block.text(1.8, y, 'H', fontsize=10, ha='center', va='center', fontweight='bold')
-    ax_block.text(1.8, 5.2, 'Prepare', fontsize=8, ha='center', color='gray')
+    # Ry(2.5) on ancilla_1
+    rect_ry1 = plt.Rectangle((2.0, 3.65), 0.6, 0.7, fill=True, facecolor='#C39BD3', edgecolor='black', linewidth=1.5)
+    ax_block.add_patch(rect_ry1)
+    ax_block.text(2.3, 4.1, '$R_Y$', fontsize=8, ha='center', va='center', fontweight='bold')
+    ax_block.text(2.3, 3.8, '2.5', fontsize=7, ha='center', va='center')
     
-    # Controlled shift operators
-    # S gate (controlled by ancilla 0)
-    ax_block.plot(3.5, 3, 'ko', markersize=8)  # control dot
-    ax_block.vlines(3.5, 1, 3, colors='black', linewidth=1.5)
-    rect_s = plt.Rectangle((3.1, 0.6), 0.8, 0.8, fill=True, facecolor='#F9E79F', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_s)
-    ax_block.text(3.5, 1, 'S', fontsize=10, ha='center', va='center', fontweight='bold')
+    # X gate on ancilla_0 (controlled)
+    rect_x1 = plt.Rectangle((3.5, 4.7), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
+    ax_block.add_patch(rect_x1)
+    ax_block.text(3.8, 5, 'X', fontsize=10, ha='center', va='center', fontweight='bold')
+    ax_block.plot(3.8, 4, 'o', markersize=6, markerfacecolor='#C39BD3', markeredgecolor='black')
+    ax_block.vlines(3.8, 4, 4.7, colors='black', linewidth=1.5)
     
-    # S† gate (controlled by ancilla 1)
-    ax_block.plot(5.5, 4, 'ko', markersize=8)  # control dot
-    ax_block.vlines(5.5, 1, 4, colors='black', linewidth=1.5)
-    rect_sd = plt.Rectangle((5.1, 0.6), 0.8, 0.8, fill=True, facecolor='#F9E79F', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_sd)
-    ax_block.text(5.5, 1, 'S†', fontsize=10, ha='center', va='center', fontweight='bold')
+    # T_dg multi-qubit gate (controlled by ancillas)
+    rect_tdg = plt.Rectangle((5.0, -0.3), 1.2, 3.6, fill=True, facecolor='#C39BD3', edgecolor='black', linewidth=1.5)
+    ax_block.add_patch(rect_tdg)
+    ax_block.text(5.6, 3, '0', fontsize=9, ha='center', va='center')
+    ax_block.text(5.6, 2, '1', fontsize=9, ha='center', va='center')
+    ax_block.text(5.6, 1.3, 'T_dg', fontsize=8, ha='center', va='center', fontweight='bold')
+    ax_block.text(5.6, 0.6, '2', fontsize=9, ha='center', va='center')
+    ax_block.text(5.6, 0, '3', fontsize=9, ha='center', va='center')
+    # Control lines
+    ax_block.plot(5.6, 5, 'ko', markersize=6)
+    ax_block.plot(5.6, 4, 'ko', markersize=6)
+    ax_block.vlines(5.6, 3.3, 5, colors='black', linewidth=1.5)
     
-    # Identity (controlled by both = 00)
-    ax_block.plot(7.5, 4, 'o', markersize=8, markerfacecolor='white', markeredgecolor='black', linewidth=1.5)
-    ax_block.plot(7.5, 3, 'o', markersize=8, markerfacecolor='white', markeredgecolor='black', linewidth=1.5)
-    ax_block.vlines(7.5, 1, 4, colors='black', linewidth=1.5)
-    rect_i = plt.Rectangle((7.1, 0.6), 0.8, 0.8, fill=True, facecolor='#D5F5E3', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_i)
-    ax_block.text(7.5, 1, 'I', fontsize=10, ha='center', va='center', fontweight='bold')
+    # X gate on ancilla_0 (controlled)
+    rect_x2 = plt.Rectangle((7.2, 4.7), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
+    ax_block.add_patch(rect_x2)
+    ax_block.text(7.5, 5, 'X', fontsize=10, ha='center', va='center', fontweight='bold')
+    ax_block.plot(7.5, 4, 'o', markersize=6, markerfacecolor='#C39BD3', markeredgecolor='black')
+    ax_block.vlines(7.5, 4, 4.7, colors='black', linewidth=1.5)
     
-    ax_block.text(5.5, 5.2, 'Select (LCU)', fontsize=8, ha='center', color='gray')
+    # T multi-qubit gate (controlled by ancillas)
+    rect_t = plt.Rectangle((8.5, -0.3), 1.2, 3.6, fill=True, facecolor='#C39BD3', edgecolor='black', linewidth=1.5)
+    ax_block.add_patch(rect_t)
+    ax_block.text(9.1, 3, '0', fontsize=9, ha='center', va='center')
+    ax_block.text(9.1, 2, '1', fontsize=9, ha='center', va='center')
+    ax_block.text(9.1, 1.3, 'T', fontsize=8, ha='center', va='center', fontweight='bold')
+    ax_block.text(9.1, 0.6, '2', fontsize=9, ha='center', va='center')
+    ax_block.text(9.1, 0, '3', fontsize=9, ha='center', va='center')
+    # Control lines
+    ax_block.plot(9.1, 5, 'ko', markersize=6)
+    ax_block.plot(9.1, 4, 'ko', markersize=6)
+    ax_block.vlines(9.1, 3.3, 5, colors='black', linewidth=1.5)
     
-    # Unprepare block - H gates
-    for y in [4, 3]:
-        rect = plt.Rectangle((9.3, y-0.3), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
-        ax_block.add_patch(rect)
-        ax_block.text(9.6, y, 'H', fontsize=10, ha='center', va='center', fontweight='bold')
-    ax_block.text(9.6, 5.2, 'Unprepare', fontsize=8, ha='center', color='gray')
+    # H gate on ancilla_0 (final)
+    rect_h2 = plt.Rectangle((10.8, 4.7), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
+    ax_block.add_patch(rect_h2)
+    ax_block.text(11.1, 5, 'H', fontsize=10, ha='center', va='center', fontweight='bold')
     
-    # Postselection note
-    ax_block.text(11, 3.5, '→ |00⟩', fontsize=9, ha='left', va='center', color='#27AE60', fontweight='bold')
+    # Ry(-2.5) on ancilla_1
+    rect_ry2 = plt.Rectangle((10.8, 3.65), 0.6, 0.7, fill=True, facecolor='#C39BD3', edgecolor='black', linewidth=1.5)
+    ax_block.add_patch(rect_ry2)
+    ax_block.text(11.1, 4.1, '$R_Y$', fontsize=8, ha='center', va='center', fontweight='bold')
+    ax_block.text(11.1, 3.8, '-2.5', fontsize=7, ha='center', va='center')
     
-    ax_block.set_title('LCU Block Encoding: $A = a_0 I + a_+ S + a_- S^\\dagger$', fontsize=10, fontweight='bold')
+    ax_block.set_title('Block Encoding Circuit (LCU Decomposition)', fontsize=10, fontweight='bold')
     
     plt.tight_layout()
     st.pyplot(fig_block, use_container_width=True)
     plt.close()
     
-    st.caption("S = cyclic shift, S† = inverse shift. Postselect ancillas on |00⟩ to apply A.")
+    st.caption("Controlled T and T† gates implement the cyclic shift operators for the diffusion stencil.")
 
 # Step 2: QSVT Circuit
 st.markdown("### Step 2: QSVT Polynomial Transformation")
