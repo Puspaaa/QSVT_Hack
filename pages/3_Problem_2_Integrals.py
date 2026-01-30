@@ -47,6 +47,130 @@ The problem therefore reduces to estimating the overlap $\langle D|u\rangle$, ac
 st.markdown("---")
 
 # =============================================================================
+# JORGE'S DETAILED THEORY SECTION
+# =============================================================================
+st.header("Complete Mathematical Framework")
+st.caption("Detailed derivation for quantum integral estimation (Jorge's presentation)")
+
+with st.expander("**Quantum Integral Estimation - Full Derivation**", expanded=True):
+    st.markdown(r"""
+## Quantum Integral Estimation
+
+We want to estimate the integral
+
+$$
+I = \int_a^b f(x)\,dx,
+$$
+
+where $f(x) := u(x,T)$.
+
+using a discretized grid represented by a quantum register of $n$ qubits.  
+This corresponds to
+
+$$
+N = 2^n, \qquad \Delta x = \frac{1}{N}.
+$$
+
+We use grid points
+
+$$
+x_j = j\,\Delta x, \quad j = 0,1,\dots,N-1.
+$$
+
+---
+
+### Quantum formulation
+
+$$
+|u\rangle
+= \frac{1}{\|u\|}\sum_{j=0}^{2^{n}-1} u(\Delta x\, j,\, T)\,|j\rangle
+$$
+
+$$
+|D\rangle
+= \frac{1}{\sqrt{|D|}}\sum_{j\in D} |j\rangle,
+\qquad
+D=\{\, j:\ a \le j\,\Delta x \le b \,\}
+$$
+
+$$
+\int_a^b u(x,T)\,dx
+= \frac{1}{2^n}\sum_{j\in D} u(\Delta x\, j, T)
+= \langle D|u\rangle\,\frac{\sqrt{|D|}\,\|u\|}{2^n}
+$$
+""")
+
+with st.expander("**Constructing |D⟩ and Estimating the Overlap - Full Derivation**", expanded=True):
+    st.markdown(r"""
+---
+
+### Constructing $|D\rangle$ and estimating the overlap
+
+The problem therefore reduces to estimating the overlap $\langle D|u\rangle$,
+which can be accessed using a standard Hadamard test.
+
+The state encoding the function values, $|u\rangle$, is assumed to be available (we constructed it in problem 1).
+The remaining task is to construct the interval state $|D\rangle$.
+
+---
+
+#### Post-selection from a uniform superposition
+
+The set of valid indices $D$ can be characterized by a Boolean function
+$$
+\chi_D(j) =
+\begin{cases}
+1 & \text{if } a \le j\,\Delta x \le b, \\
+0 & \text{otherwise}.
+\end{cases}
+$$
+
+Since this condition involves only simple comparisons, it can be efficiently implemented
+as a quantum oracle acting on an ancilla qubit:
+$$
+O_D\,|j\rangle|i\rangle = |j\rangle\,|\,i \oplus \chi_D(j)\rangle.
+$$
+
+Starting from the uniform superposition $|+\rangle^{\otimes n}$,
+measuring the ancilla after applying $O_D$ yields outcome $1$ with probability
+$$
+\Pr(1)=\frac{|D|}{N}.
+$$
+Conditioned on this outcome, the register collapses to the desired state $|D\rangle$.
+The expected number of repetitions required is therefore
+$$
+O\!\left(\frac{N}{|D|}\right)=O\!\left(\frac{1}{b-a}\right).
+$$
+
+---
+
+#### Speedup via Grover (amplitude) amplification
+
+To improve the efficiency, one can apply Grover-style amplitude amplification starting from
+the uniform superposition $|+\rangle^{\otimes n}$, using the oracle $O_D$ to mark the
+indices in $D$, together with a reflection about $|+\rangle^{\otimes n}$.
+
+After amplification, the state is rotated close to the target subspace:
+$$
+|+\rangle^{\otimes n}
+\;\longrightarrow\;
+|D_{\text{approx}}\rangle
+= \alpha\,|D\rangle + \sqrt{1-\alpha^2}\,|g\rangle,
+\qquad \alpha \approx 1,
+$$
+where $|g\rangle$ has support only on indices outside $D$.
+
+Measuring the same ancilla as above now yields outcome $1$ with significantly higher
+probability, reducing the expected complexity to
+$$
+O\!\left(\sqrt{\frac{N}{|D|}}\right)
+= O\!\left(\frac{1}{\sqrt{b-a}}\right).
+$$
+""")
+
+st.markdown("---")
+
+# =============================================================================
 # THE THREE METHODS
 # =============================================================================
 st.header("Three Quantum Approaches")
