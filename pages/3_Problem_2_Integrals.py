@@ -440,120 +440,116 @@ st.markdown("---")
 # =============================================================================
 # INTERACTIVE DEMO SECTION
 # =============================================================================
-st.markdown("### Configuration")
+st.header("Interactive Demo")
 
-# Use tabs for organization
-config_tab, viz_tab = st.tabs(["Setup", "Function Preview"])
+col1, col2 = st.columns(2)
 
-with config_tab:
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("**Function to Integrate**")
-        
-        func_type = st.radio(
-            "Function Type",
-            ["Preset Functions", "Custom Function"],
-            horizontal=True,
-            label_visibility="collapsed"
+with col1:
+    st.markdown("**Function to Integrate**")
+    
+    func_type = st.radio(
+        "Function Type",
+        ["Preset Functions", "Custom Function"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+    
+    if func_type == "Preset Functions":
+        func_choice = st.selectbox(
+            "Select f(x)", 
+            ["sin", "gaussian", "linear", "quadratic", "step", "sawtooth", "cosine"],
+            help="Choose from preset test functions"
         )
+        custom_func = None
         
-        if func_type == "Preset Functions":
-            func_choice = st.selectbox(
-                "Select f(x)", 
-                ["sin", "gaussian", "linear", "quadratic", "step", "sawtooth", "cosine"],
-                help="Choose from preset test functions"
-            )
+        # Show function formula
+        func_formulas = {
+            "sin": r"$f(x) = \sin(2\pi x) + 2$",
+            "gaussian": r"$f(x) = e^{-20(x-0.5)^2}$",
+            "linear": r"$f(x) = 2x + 0.5$",
+            "quadratic": r"$f(x) = 4x(1-x) + 0.5$",
+            "step": r"$f(x) = \begin{cases} 1 & x < 0.5 \\ 2 & x \geq 0.5 \end{cases}$",
+            "sawtooth": r"$f(x) = (x \mod 0.25) \times 4 + 0.5$",
+            "cosine": r"$f(x) = \cos(2\pi x) + 1.5$"
+        }
+        st.latex(func_formulas.get(func_choice, ''))
+        
+    else:
+        st.markdown("**Python expression (use x as variable):**")
+        custom_func = st.text_input(
+            "Custom f(x)", 
+            value="np.sin(3*np.pi*x) + 1.5",
+            help="Use numpy functions with 'np.' prefix. x in [0,1]."
+        )
+        func_choice = "custom"
+        
+        # Validate custom function
+        try:
+            x_test = np.linspace(0, 1, 10)
+            y_test = eval(custom_func)
+            if np.any(y_test < 0):
+                st.warning("Warning: Function has negative values. Results may be less accurate.")
+            st.success("Function syntax is valid")
+        except Exception as e:
+            st.error(f"Invalid function: {e}")
             custom_func = None
-            
-            # Show function formula
-            func_formulas = {
-                "sin": r"$f(x) = \sin(2\pi x) + 2$",
-                "gaussian": r"$f(x) = e^{-20(x-0.5)^2}$",
-                "linear": r"$f(x) = 2x + 0.5$",
-                "quadratic": r"$f(x) = 4x(1-x) + 0.5$",
-                "step": r"$f(x) = \begin{cases} 1 & x < 0.5 \\ 2 & x \geq 0.5 \end{cases}$",
-                "sawtooth": r"$f(x) = (x \mod 0.25) \times 4 + 0.5$",
-                "cosine": r"$f(x) = \cos(2\pi x) + 1.5$"
-            }
-            st.latex(func_formulas.get(func_choice, ''))
-            
-        else:
-            st.markdown("**Python expression (use x as variable):**")
-            custom_func = st.text_input(
-                "Custom f(x)", 
-                value="np.sin(3*np.pi*x) + 1.5",
-                help="Use numpy functions with 'np.' prefix. x in [0,1]."
-            )
-            func_choice = "custom"
-            
-            # Validate custom function
-            try:
-                x_test = np.linspace(0, 1, 10)
-                y_test = eval(custom_func)
-                if np.any(y_test < 0):
-                    st.warning("Warning: Function has negative values. Results may be less accurate.")
-                st.success("Function syntax is valid")
-            except Exception as e:
-                st.error(f"Invalid function: {e}")
-                custom_func = None
-        
-        # Quantum parameters in a nice box
-        st.markdown("**Quantum Parameters**")
-        param_col1, param_col2 = st.columns(2)
-        with param_col1:
-            n_qubits = st.slider("Qubits (n)", 4, 10, 6)
-        with param_col2:
-            shots = st.select_slider("Shots", options=[1000, 5000, 10000, 20000, 50000], value=10000)
-        
-        st.caption(f"Grid: {2**n_qubits} points, dx = {1/2**n_qubits:.6f}")
+    
+    # Quantum parameters in a nice box
+    st.markdown("**Quantum Parameters**")
+    param_col1, param_col2 = st.columns(2)
+    with param_col1:
+        n_qubits = st.slider("Qubits (n)", 4, 10, 6)
+    with param_col2:
+        shots = st.select_slider("Shots", options=[1000, 5000, 10000, 20000, 50000], value=10000)
+    
+    st.caption(f"Grid: {2**n_qubits} points, dx = {1/2**n_qubits:.6f}")
 
-    with col2:
-        st.markdown("**Method and Interval**")
-        
-        method = st.radio(
-            "Integration Method", 
-            ["Compute-Uncompute (Special Intervals)", 
-             "Arithmetic/Comparison (Any Interval)",
-             "QSVT Parity Decomposition"],
-            help="Choose the quantum algorithm"
+with col2:
+    st.markdown("**Method and Interval**")
+    
+    method = st.radio(
+        "Integration Method", 
+        ["Compute-Uncompute (Special Intervals)", 
+         "Arithmetic/Comparison (Any Interval)",
+         "QSVT Parity Decomposition"],
+        help="Choose the quantum algorithm"
+    )
+    
+    # Method-specific interval selection
+    if "Compute-Uncompute" in method:
+        method = "Compute-Uncompute (Special Intervals)"
+        st.caption("*Efficient for half-intervals*")
+        interval_choice = st.radio(
+            "Select Domain D",
+            ["Left Half [0, 0.5]", "Middle Half [0.25, 0.75]"],
+            help="These intervals have efficient O(n) state preparation"
         )
-        
-        # Method-specific interval selection
-        if "Compute-Uncompute" in method:
-            method = "Compute-Uncompute (Special Intervals)"
-            st.caption("*Efficient for half-intervals*")
-            interval_choice = st.radio(
-                "Select Domain D",
-                ["Left Half [0, 0.5]", "Middle Half [0.25, 0.75]"],
-                help="These intervals have efficient O(n) state preparation"
-            )
-            if "Left" in interval_choice:
-                interval_id = "left_half"
-                a_val, b_val = 0.0, 0.5
-            else:
-                interval_id = "middle_half"
-                a_val, b_val = 0.25, 0.75
-                
-        elif "Arithmetic" in method:
-            method = "Arithmetic/Comparison (Arbitrary Intervals)"
-            st.caption("*Uses efficient IntegerComparator oracle*")
-            a_val, b_val = st.slider(
-                "Select Interval [a, b]", 0.0, 1.0, (0.25, 0.75), 
-                step=0.01, key="arith_slider"
-            )
-            interval_id = None
+        if "Left" in interval_choice:
+            interval_id = "left_half"
+            a_val, b_val = 0.0, 0.5
+        else:
+            interval_id = "middle_half"
+            a_val, b_val = 0.25, 0.75
             
-        else:  # QSVT
-            method = "QSVT Parity Decomposition (Arbitrary)"
-            st.caption("*Polynomial approximation*")
-            a_val, b_val = st.slider(
-                "Select Interval [a, b]", 0.0, 1.0, (0.3, 0.7),
-                step=0.01
-            )
-            interval_id = None
+    elif "Arithmetic" in method:
+        method = "Arithmetic/Comparison (Arbitrary Intervals)"
+        st.caption("*Uses efficient IntegerComparator oracle*")
+        a_val, b_val = st.slider(
+            "Select Interval [a, b]", 0.0, 1.0, (0.25, 0.75), 
+            step=0.01, key="arith_slider"
+        )
+        interval_id = None
+        
+    else:  # QSVT
+        method = "QSVT Parity Decomposition (Arbitrary)"
+        st.caption("*Polynomial approximation*")
+        a_val, b_val = st.slider(
+            "Select Interval [a, b]", 0.0, 1.0, (0.3, 0.7),
+            step=0.01
+        )
+        interval_id = None
 
-# Helper function for plotting (defined outside tabs)
+# Helper function for plotting
 def get_function_for_plot(func_name, n, custom_expr=None):
     """Get function values for plotting."""
     N = 2**n
@@ -585,46 +581,46 @@ def get_function_for_plot(func_name, n, custom_expr=None):
     
     return x, y
 
-with viz_tab:
-    st.markdown("#### Function Preview with Integration Domain")
-    
-    # Create visualization
-    x_plot, y_plot = get_function_for_plot(func_choice, n_qubits, custom_func)
+# Function Preview - directly on page
+st.markdown("#### Function Preview with Integration Domain")
 
-    fig, ax = plt.subplots(figsize=(10, 4))
+# Create visualization
+x_plot, y_plot = get_function_for_plot(func_choice, n_qubits, custom_func)
 
-    # Plot full function
-    ax.plot(x_plot, y_plot, 'b-', linewidth=2, label='f(x)')
+fig, ax = plt.subplots(figsize=(10, 4))
 
-    # Highlight integration domain
-    mask = (x_plot >= a_val) & (x_plot < b_val)
-    ax.fill_between(x_plot, 0, y_plot, where=mask, alpha=0.3, color='green', 
-                    label=f'∫ Domain [{a_val:.2f}, {b_val:.2f}]')
+# Plot full function
+ax.plot(x_plot, y_plot, 'b-', linewidth=2, label='f(x)')
 
-    # Mark interval boundaries
-    ax.axvline(x=a_val, color='red', linestyle='--', linewidth=1.5, alpha=0.7)
-    ax.axvline(x=b_val, color='red', linestyle='--', linewidth=1.5, alpha=0.7)
+# Highlight integration domain
+mask = (x_plot >= a_val) & (x_plot < b_val)
+ax.fill_between(x_plot, 0, y_plot, where=mask, alpha=0.3, color='green', 
+                label=f'∫ Domain [{a_val:.2f}, {b_val:.2f}]')
 
-    # Compute exact integral for display
-    dx = 1.0 / len(x_plot)
-    exact_integral = np.sum(y_plot[mask]) * dx
+# Mark interval boundaries
+ax.axvline(x=a_val, color='red', linestyle='--', linewidth=1.5, alpha=0.7)
+ax.axvline(x=b_val, color='red', linestyle='--', linewidth=1.5, alpha=0.7)
 
-    ax.set_xlabel('x', fontsize=12)
-    ax.set_ylabel('f(x)', fontsize=12)
-    ax.set_title(f'f(x) over [{a_val:.2f}, {b_val:.2f}] — Exact ∫ ≈ {exact_integral:.4f}', fontsize=11)
-    ax.legend(loc='upper right')
-    ax.grid(True, alpha=0.3)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, max(y_plot) * 1.1)
+# Compute exact integral for display
+dx = 1.0 / len(x_plot)
+exact_integral = np.sum(y_plot[mask]) * dx
 
-    st.pyplot(fig)
-    plt.close()
-    
-    # Grid info
-    N = 2**n_qubits
-    a_int = int(np.floor(a_val * N))
-    b_int = min(int(np.floor(b_val * N)), N-1)
-    st.caption(f"Grid: {N} points | Interval indices [{a_int}, {b_int}] ({b_int - a_int + 1} points)")
+ax.set_xlabel('x', fontsize=12)
+ax.set_ylabel('f(x)', fontsize=12)
+ax.set_title(f'f(x) over [{a_val:.2f}, {b_val:.2f}] — Exact ∫ ≈ {exact_integral:.4f}', fontsize=11)
+ax.legend(loc='upper right')
+ax.grid(True, alpha=0.3)
+ax.set_xlim(0, 1)
+ax.set_ylim(0, max(y_plot) * 1.1)
+
+st.pyplot(fig)
+plt.close()
+
+# Grid info
+N = 2**n_qubits
+a_int = int(np.floor(a_val * N))
+b_int = min(int(np.floor(b_val * N)), N-1)
+st.caption(f"Grid: {N} points | Interval indices [{a_int}, {b_int}] ({b_int - a_int + 1} points)")
 
 # =============================================================================
 # EXECUTION
