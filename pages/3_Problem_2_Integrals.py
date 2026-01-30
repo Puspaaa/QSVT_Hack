@@ -139,14 +139,301 @@ st.markdown("---")
 # =============================================================================
 st.header("Three Implementation Approaches")
 
+st.markdown("""
+We explored **three different approaches** to construct the interval state $|D\\rangle$ and estimate the overlap.
+Each has different trade-offs in terms of generality, complexity, and accuracy.
+""")
+
 comparison_data = {
     "Method": ["1. Compute-Uncompute", "2. Arithmetic/Comparison", "3. QSVT Parity"],
     "Intervals": ["Special only ([0,0.5], [0.25,0.75])", "Any [a,b]", "Any [a,b]"],
     "Complexity": ["O(n) gates", "O(n) comparators", "O(d·n) gates"],
     "Error": ["< 1%", "3-15%", "5-30%"],
-    "Best For": ["Half-intervals", "Arbitrary intervals + Grover", "Smooth approximation"]
+    "Best For": ["Half-intervals", "Arbitrary intervals", "Smooth approximation"]
 }
 st.table(pd.DataFrame(comparison_data))
+
+st.info("""
+**Note on Grover Amplification:** While Grover-style amplitude amplification can theoretically provide a quadratic 
+speedup for post-selection (reducing complexity from $O(N/|D|)$ to $O(\\sqrt{N/|D|})$), we focus on the basic 
+post-selection approach in this demonstration for clarity.
+""")
+
+# =============================================================================
+# DETAILED EXPLANATION OF EACH APPROACH
+# =============================================================================
+st.markdown("---")
+st.header("Detailed Method Explanations")
+
+# Method 1: Compute-Uncompute
+st.subheader("Method 1: Compute-Uncompute")
+
+col1_m1, col2_m1 = st.columns([3, 2])
+
+with col1_m1:
+    st.markdown(r"""
+    **Core Idea:** For special intervals aligned with the qubit structure, we can prepare $|D\rangle$ directly 
+    using only Hadamard gates—no comparators or ancillas needed!
+    
+    **How it works:**
+    1. Start with $|0\rangle^{\otimes n}$
+    2. Apply Hadamards to specific qubits to create uniform superposition over the desired interval
+    3. Apply $U_f^\dagger$ (inverse state preparation)
+    4. Measure: probability of $|0\rangle^{\otimes n}$ gives $|\langle D|f\rangle|^2$
+    
+    **Supported Intervals:**
+    - **Left half [0, 0.5]:** Apply H to all qubits except MSB (which stays $|0\rangle$)
+    - **Middle half [0.25, 0.75]:** Use H gates + CNOT entanglement pattern
+    
+    **Why it's efficient:** The interval boundaries align perfectly with qubit bit patterns, so no arithmetic 
+    comparison is needed.
+    """)
+
+with col2_m1:
+    # Circuit diagram for compute-uncompute
+    st.markdown("**Circuit Diagram (Left Half [0, 0.5]):**")
+    
+    fig_m1, ax_m1 = plt.subplots(figsize=(6, 3))
+    ax_m1.set_xlim(0, 10)
+    ax_m1.set_ylim(-0.5, 3.5)
+    ax_m1.axis('off')
+    
+    # Draw qubit lines
+    for i in range(4):
+        ax_m1.hlines(i, 0.5, 9.5, colors='black', linewidth=1)
+        ax_m1.text(0.2, i, f'$q_{i}$', fontsize=10, ha='right', va='center')
+    
+    # Initial state |0⟩
+    ax_m1.text(0.7, 3.8, '$|0\\rangle^{\\otimes n}$', fontsize=9)
+    
+    # H gates (on lower qubits only for left half)
+    for i in range(3):  # H on q0, q1, q2 but NOT q3 (MSB)
+        rect = plt.Rectangle((1.5, i-0.3), 0.6, 0.6, fill=True, facecolor='lightblue', edgecolor='black')
+        ax_m1.add_patch(rect)
+        ax_m1.text(1.8, i, 'H', fontsize=10, ha='center', va='center')
+    
+    # MSB stays |0⟩
+    ax_m1.text(1.8, 3, '$|0\\rangle$', fontsize=9, ha='center', va='center', color='red')
+    
+    # Uf† block
+    rect_uf = plt.Rectangle((3.5, -0.3), 1.5, 3.6, fill=True, facecolor='lightyellow', edgecolor='black')
+    ax_m1.add_patch(rect_uf)
+    ax_m1.text(4.25, 1.5, '$U_f^\\dagger$', fontsize=11, ha='center', va='center')
+    
+    # Measurement
+    for i in range(4):
+        rect_m = plt.Rectangle((6.5, i-0.25), 0.5, 0.5, fill=True, facecolor='lightgray', edgecolor='black')
+        ax_m1.add_patch(rect_m)
+        ax_m1.text(6.75, i, 'M', fontsize=9, ha='center', va='center')
+    
+    # Output
+    ax_m1.text(8.5, 1.5, '$P(0^n) = |\\langle D|f\\rangle|^2$', fontsize=9, ha='center', va='center')
+    
+    ax_m1.set_title('Compute-Uncompute Circuit', fontsize=10)
+    st.pyplot(fig_m1)
+    plt.close()
+
+st.markdown("---")
+
+# Method 2: Arithmetic/Comparison
+st.subheader("Method 2: Arithmetic/Comparison (IntegerComparator)")
+
+col1_m2, col2_m2 = st.columns([3, 2])
+
+with col1_m2:
+    st.markdown(r"""
+    **Core Idea:** Use quantum arithmetic circuits to check if each basis state index $j$ falls within $[a, b]$.
+    This works for **any interval**, not just special ones.
+    
+    **How it works:**
+    1. Start with uniform superposition: $|+\rangle^{\otimes n} = \frac{1}{\sqrt{N}}\sum_j |j\rangle$
+    2. Apply comparator oracle: $|j\rangle|0\rangle \to |j\rangle|\chi_D(j)\rangle$
+       - Uses `IntegerComparator` circuits: check $j \geq a$ AND $j \leq b$
+       - Combines two comparison results with a CCX (Toffoli) gate
+    3. Apply $U_f^\dagger$ to the main register
+    4. Measure and **post-select** on ancilla = 1
+    
+    **The Oracle Logic:**
+    ```
+    result_a = (j >= a_int)    # First comparator
+    result_b = (j <= b_int)    # Second comparator  
+    target = result_a AND result_b  # CCX gate
+    ```
+    
+    **Post-selection:** We only keep measurement results where the marking qubit is $|1\rangle$, 
+    indicating the state was in the interval. This has success probability $|D|/N$.
+    """)
+
+with col2_m2:
+    st.markdown("**Circuit Diagram:**")
+    
+    fig_m2, ax_m2 = plt.subplots(figsize=(6, 4))
+    ax_m2.set_xlim(0, 12)
+    ax_m2.set_ylim(-1, 5)
+    ax_m2.axis('off')
+    
+    # Main register (n qubits shown as 3)
+    for i in range(3):
+        ax_m2.hlines(i+2, 0.5, 11.5, colors='black', linewidth=1)
+    ax_m2.text(0.2, 3, 'main', fontsize=9, ha='right', va='center')
+    ax_m2.text(0.2, 2.3, '($n$ qubits)', fontsize=7, ha='right', va='center', color='gray')
+    
+    # Ancilla qubits
+    ax_m2.hlines(1, 0.5, 11.5, colors='blue', linewidth=1)
+    ax_m2.text(0.2, 1, 'res_a', fontsize=8, ha='right', va='center', color='blue')
+    ax_m2.hlines(0.3, 0.5, 11.5, colors='blue', linewidth=1)
+    ax_m2.text(0.2, 0.3, 'res_b', fontsize=8, ha='right', va='center', color='blue')
+    ax_m2.hlines(-0.5, 0.5, 11.5, colors='green', linewidth=1)
+    ax_m2.text(0.2, -0.5, 'target', fontsize=8, ha='right', va='center', color='green')
+    
+    # H gates on main register
+    for i in range(3):
+        rect = plt.Rectangle((1.2, i+2-0.2), 0.4, 0.4, fill=True, facecolor='lightblue', edgecolor='black')
+        ax_m2.add_patch(rect)
+        ax_m2.text(1.4, i+2, 'H', fontsize=8, ha='center', va='center')
+    
+    # Comparator ≥a
+    rect_ca = plt.Rectangle((2.3, 0.8), 1.2, 3.4, fill=True, facecolor='#ffcccc', edgecolor='black')
+    ax_m2.add_patch(rect_ca)
+    ax_m2.text(2.9, 2.5, '$\\geq a$', fontsize=9, ha='center', va='center')
+    
+    # Comparator ≤b  
+    rect_cb = plt.Rectangle((4, 0.1), 1.2, 3.9, fill=True, facecolor='#ccccff', edgecolor='black')
+    ax_m2.add_patch(rect_cb)
+    ax_m2.text(4.6, 2.2, '$\\leq b$', fontsize=9, ha='center', va='center')
+    
+    # CCX gate (combine results)
+    ax_m2.plot(5.8, 1, 'ko', markersize=6)
+    ax_m2.plot(5.8, 0.3, 'ko', markersize=6)
+    ax_m2.vlines(5.8, -0.5, 1, colors='black', linewidth=1)
+    circle = plt.Circle((5.8, -0.5), 0.15, fill=False, edgecolor='black', linewidth=2)
+    ax_m2.add_patch(circle)
+    ax_m2.plot([5.65, 5.95], [-0.5, -0.5], 'k-', linewidth=2)
+    ax_m2.plot([5.8, 5.8], [-0.65, -0.35], 'k-', linewidth=2)
+    
+    # Uf† block
+    rect_uf = plt.Rectangle((6.8, 1.8), 1.2, 2.4, fill=True, facecolor='lightyellow', edgecolor='black')
+    ax_m2.add_patch(rect_uf)
+    ax_m2.text(7.4, 3, '$U_f^\\dagger$', fontsize=10, ha='center', va='center')
+    
+    # Measurements
+    for i in range(3):
+        rect_m = plt.Rectangle((8.8, i+2-0.15), 0.4, 0.3, fill=True, facecolor='lightgray', edgecolor='black')
+        ax_m2.add_patch(rect_m)
+    rect_mt = plt.Rectangle((8.8, -0.65), 0.4, 0.3, fill=True, facecolor='lightgreen', edgecolor='black')
+    ax_m2.add_patch(rect_mt)
+    
+    # Labels
+    ax_m2.text(10.5, 3, 'main=0?', fontsize=8, ha='center', va='center')
+    ax_m2.text(10.5, -0.5, 'target=1?', fontsize=8, ha='center', va='center', color='green')
+    
+    ax_m2.set_title('Arithmetic/Comparison Circuit', fontsize=10)
+    st.pyplot(fig_m2)
+    plt.close()
+
+st.markdown("---")
+
+# Method 3: QSVT
+st.subheader("Method 3: QSVT Parity Decomposition")
+
+col1_m3, col2_m3 = st.columns([3, 2])
+
+with col1_m3:
+    st.markdown(r"""
+    **Core Idea:** Instead of exactly marking states in $[a,b]$, approximate the boxcar (indicator) function 
+    using **polynomials** implemented via QSVT (Quantum Singular Value Transformation).
+    
+    **The Challenge:** QSVT can only implement polynomials with definite parity:
+    - **Even:** $P(-x) = P(x)$
+    - **Odd:** $P(-x) = -P(x)$
+    
+    But a boxcar function has **no definite parity**!
+    
+    **Solution - Parity Decomposition:**
+    $$\chi_{[a,b]}(x) = P_{\text{even}}(x) + P_{\text{odd}}(x)$$
+    
+    where:
+    - $P_{\text{even}}(x) = \frac{1}{2}[\chi(x) + \chi(-x)]$
+    - $P_{\text{odd}}(x) = \frac{1}{2}[\chi(x) - \chi(-x)]$
+    
+    **How it works:**
+    1. Map position $x \in [0,1)$ to eigenvalue $\lambda = \cos(\pi x) \in [-1,1]$
+    2. Compute Chebyshev polynomial approximations for even and odd parts
+    3. Run **two separate QSVT circuits** (one for each parity)
+    4. Combine results: $\text{Total} = \text{amp}_{\text{even}} + \text{amp}_{\text{odd}}$
+    
+    **Trade-off:** Smooth approximation → some Gibbs ringing at discontinuities.
+    """)
+
+with col2_m3:
+    st.markdown("**Circuit Diagram (Parity Decomposition):**")
+    
+    fig_m3, ax_m3 = plt.subplots(figsize=(6, 4))
+    ax_m3.set_xlim(0, 12)
+    ax_m3.set_ylim(-0.5, 4.5)
+    ax_m3.axis('off')
+    
+    # EVEN circuit
+    ax_m3.text(0.5, 3.8, 'Even Circuit:', fontsize=9, fontweight='bold')
+    ax_m3.hlines(3, 1, 11, colors='black', linewidth=1)
+    ax_m3.text(0.7, 3, '$|f\\rangle$', fontsize=9, ha='right', va='center')
+    
+    rect_even = plt.Rectangle((2.5, 2.6), 2.5, 0.8, fill=True, facecolor='#e6ffe6', edgecolor='darkgreen', linewidth=2)
+    ax_m3.add_patch(rect_even)
+    ax_m3.text(3.75, 3, '$\\text{QSVT}_{even}$', fontsize=10, ha='center', va='center')
+    
+    rect_m1 = plt.Rectangle((6.5, 2.85), 0.5, 0.3, fill=True, facecolor='lightgray', edgecolor='black')
+    ax_m3.add_patch(rect_m1)
+    ax_m3.text(8.5, 3, '$\\rightarrow$ amp$_{even}$', fontsize=9, ha='center', va='center')
+    
+    # ODD circuit
+    ax_m3.text(0.5, 1.8, 'Odd Circuit:', fontsize=9, fontweight='bold')
+    ax_m3.hlines(1, 1, 11, colors='black', linewidth=1)
+    ax_m3.text(0.7, 1, '$|f\\rangle$', fontsize=9, ha='right', va='center')
+    
+    rect_odd = plt.Rectangle((2.5, 0.6), 2.5, 0.8, fill=True, facecolor='#ffe6e6', edgecolor='darkred', linewidth=2)
+    ax_m3.add_patch(rect_odd)
+    ax_m3.text(3.75, 1, '$\\text{QSVT}_{odd}$', fontsize=10, ha='center', va='center')
+    
+    rect_m2 = plt.Rectangle((6.5, 0.85), 0.5, 0.3, fill=True, facecolor='lightgray', edgecolor='black')
+    ax_m3.add_patch(rect_m2)
+    ax_m3.text(8.5, 1, '$\\rightarrow$ amp$_{odd}$', fontsize=9, ha='center', va='center')
+    
+    # Combination
+    ax_m3.text(6, -0.2, 'Total = amp$_{even}$ + amp$_{odd}$', fontsize=10, ha='center', va='center', 
+               bbox=dict(boxstyle='round', facecolor='lightyellow', edgecolor='orange'))
+    
+    ax_m3.set_title('QSVT Parity Decomposition', fontsize=10)
+    st.pyplot(fig_m3)
+    plt.close()
+
+# Eigenvalue mapping visualization
+st.markdown("**Eigenvalue Mapping: $\\lambda = \\cos(\\pi x)$**")
+col_ev1, col_ev2 = st.columns(2)
+
+with col_ev1:
+    fig_ev, ax_ev = plt.subplots(figsize=(5, 3))
+    x_map = np.linspace(0, 1, 100)
+    lambda_map = np.cos(np.pi * x_map)
+    ax_ev.plot(x_map, lambda_map, 'b-', linewidth=2)
+    ax_ev.axhline(0, color='gray', linestyle='--', alpha=0.5)
+    ax_ev.set_xlabel('Position x ∈ [0, 1)')
+    ax_ev.set_ylabel('Eigenvalue λ = cos(πx)')
+    ax_ev.set_title('x → λ Mapping')
+    ax_ev.grid(True, alpha=0.3)
+    st.pyplot(fig_ev)
+    plt.close()
+
+with col_ev2:
+    st.markdown(r"""
+    **Key insight:** The mapping $\lambda = \cos(\pi x)$ is **monotonically decreasing**:
+    - $x = 0 \to \lambda = 1$
+    - $x = 0.5 \to \lambda = 0$
+    - $x = 1 \to \lambda = -1$
+    
+    This means an interval $[a, b]$ in position space maps to 
+    $[\cos(\pi b), \cos(\pi a)]$ in eigenvalue space (note the reversal!).
+    """)
 
 st.markdown("---")
 
@@ -257,22 +544,6 @@ with config_tab:
             )
             interval_id = None
             
-            # Grover amplitude amplification option
-            st.markdown("**Advanced Options**")
-            use_grover = st.checkbox(
-                "Enable Grover Amplitude Amplification",
-                value=False,
-                help="Quadratic speedup for post-selection: O(√(N/M)) vs O(N/M)"
-            )
-            if use_grover:
-                grover_iterations = st.slider(
-                    "Grover Iterations (0 = auto)",
-                    0, 5, 0,
-                    help="0 = automatically calculate optimal iterations"
-                )
-            else:
-                grover_iterations = 0
-            
         else:  # QSVT
             method = "QSVT Parity Decomposition (Arbitrary)"
             st.caption("*Polynomial approximation*")
@@ -281,13 +552,6 @@ with config_tab:
                 step=0.01
             )
             interval_id = None
-            use_grover = False
-            grover_iterations = 0
-
-# Initialize Grover variables for methods that don't use them
-if "Arithmetic" not in method:
-    use_grover = False
-    grover_iterations = 0
 
 # Helper function for plotting (defined outside tabs)
 def get_function_for_plot(func_name, n, custom_expr=None):
@@ -417,9 +681,7 @@ if run_button:
                 """)
             
             elif method == "Arithmetic/Comparison (Arbitrary Intervals)":
-                res = run_arithmetic_integral(n_qubits, effective_func, a_val, b_val, shots,
-                                              use_amplitude_amplification=use_grover,
-                                              num_grover_iterations=grover_iterations)
+                res = run_arithmetic_integral(n_qubits, effective_func, a_val, b_val, shots)
                 
                 if func_choice == "custom":
                     x_grid, y_vals = get_function_for_plot("custom", n_qubits, custom_func)
@@ -428,10 +690,7 @@ if run_button:
                     mask = (x_grid >= a_val) & (x_grid < b_val)
                     res['integral_exact'] = np.sum(y_vals[mask]) * dx
                 
-                if res.get('use_grover', False):
-                    st.success(f"Arithmetic/Comparison with Grover Amplification ({res['grover_iterations']} iterations)")
-                else:
-                    st.success("Arithmetic/Comparison Method Complete (IntegerComparator Oracle)")
+                st.success("Arithmetic/Comparison Method Complete (IntegerComparator Oracle)")
                 
                 col1, col2, col3 = st.columns(3)
                 col1.metric(f"Exact [{a_val:.2f}, {b_val:.2f}]", f"{res['integral_exact']:.5f}")
@@ -439,37 +698,16 @@ if run_button:
                 rel_err = abs(res['error']/res['integral_exact'])*100 if res['integral_exact'] != 0 else 0
                 col3.metric("Relative Error", f"{rel_err:.1f}%")
                 
-                # Different output based on whether Grover was used
-                if res.get('use_grover', False):
-                    st.markdown(f"""
-                    **Algorithm with Grover Amplitude Amplification**
-                    
-                    | Step | Operation | Result |
-                    |------|-----------|--------|
-                    | 1 | Apply $H^{{\\otimes {n_qubits}}}$ | Uniform superposition over {2**n_qubits} states |
-                    | 2 | Oracle + Diffusion × {res['grover_iterations']} | Amplify marked states |
-                    | 3 | Apply $U_f^\\dagger$ | Compute overlap |
-                    | 4 | Measure | Extract amplified result |
-                    
-                    **Grover Amplification Details**
-                    
-                    | Parameter | Value |
-                    |-----------|-------|
-                    | Grover Iterations | {res['grover_iterations']} |
-                    | Expected Speedup | $O(\\sqrt{{N/M}}) = O(\\sqrt{{{2**n_qubits}/{res['num_points']}}}) \\approx {np.sqrt(2**n_qubits/max(1,res['num_points'])):.1f}\\times$ |
-                    | P(marked) after amplification | {res['post_select_rate']:.2%} |
-                    """)
-                else:
-                    st.markdown(f"""
-                    **Algorithm Execution Details**
-                    
-                    | Step | Operation | Result |
-                    |------|-----------|--------|
-                    | 1 | Apply $H^{{\\otimes {n_qubits}}}$ | Uniform superposition over {2**n_qubits} states |
-                    | 2 | IntegerComparator Oracle | Mark {res['num_points']} states in {res['interval_int']} |
-                    | 3 | Apply $U_f^\\dagger$ | Compute overlap with $|f\\rangle$ |
-                    | 4 | Measure & post-select | Keep target=1 results |
-                    """)
+                st.markdown(f"""
+                **Algorithm Execution Details**
+                
+                | Step | Operation | Result |
+                |------|-----------|--------|
+                | 1 | Apply $H^{{\\otimes {n_qubits}}}$ | Uniform superposition over {2**n_qubits} states |
+                | 2 | IntegerComparator Oracle | Mark {res['num_points']} states in {res['interval_int']} |
+                | 3 | Apply $U_f^\\dagger$ | Compute overlap with $|f\\rangle$ |
+                | 4 | Measure & post-select | Keep target=1 results |
+                """)
                 
                 st.markdown(f"""
                 **Measurement Statistics**
