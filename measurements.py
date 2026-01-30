@@ -262,6 +262,10 @@ def run_qsvt_integral_arbitrary(n, func_name, a, b, shots=10000):
 # ==============================================================================
 # 4. METHOD 3: ARITHMETIC/COMPARISON APPROACH (Arbitrary Intervals)
 # ==============================================================================
+# 
+# Uses IntegerComparator for efficient range marking (inspired by Miro's implementation)
+# Optional Grover amplitude amplification for quadratic speedup in post-selection
+# ==============================================================================
 
 def _build_state_prep_unitary(target_state):
     """
@@ -304,17 +308,101 @@ def _build_state_prep_unitary(target_state):
     return U
 
 
-def run_arithmetic_integral(n, func_name, a, b, shots=10000):
+def _build_range_oracle(n, a_int, b_int):
+    """
+    Build efficient range oracle using IntegerComparator (Miro's approach).
+    
+    Marks states j where a_int <= j <= b_int by flipping target qubit.
+    Uses two comparators: (x >= a) AND (x <= b)
+    
+    Returns: QuantumCircuit with registers [x(n), res_a(1), res_b(1), internal(n-1), target(1)]
+    """
+    from qiskit import QuantumCircuit, QuantumRegister
+    from qiskit.circuit.library import IntegerComparator
+    
+    # Determine ancilla requirements
+    temp_comp = IntegerComparator(n, a_int)
+    num_comp_qubits = temp_comp.num_qubits
+    num_internal = max(0, num_comp_qubits - n - 1)
+    
+    # Create registers
+    x = QuantumRegister(n, 'x')
+    res_a = QuantumRegister(1, 'res_a')
+    res_b = QuantumRegister(1, 'res_b')
+    target = QuantumRegister(1, 'target')
+    
+    if num_internal > 0:
+        internal = QuantumRegister(num_internal, 'internal')
+        qc = QuantumCircuit(x, res_a, res_b, internal, target)
+        internal_qubits = internal[:]
+    else:
+        qc = QuantumCircuit(x, res_a, res_b, target)
+        internal_qubits = []
+    
+    # Comparators: x >= a and x <= b (i.e., x < b+1)
+    comp_a = IntegerComparator(n, a_int, geq=True)
+    comp_b = IntegerComparator(n, b_int + 1, geq=False)
+    
+    # Step 1: Compute x >= a
+    if num_internal > 0:
+        qc.append(comp_a, x[:] + res_a[:] + internal_qubits)
+    else:
+        qc.append(comp_a, x[:] + res_a[:])
+    
+    # Step 2: Compute x <= b
+    if num_internal > 0:
+        qc.append(comp_b, x[:] + res_b[:] + internal_qubits)
+    else:
+        qc.append(comp_b, x[:] + res_b[:])
+    
+    # Step 3: target = res_a AND res_b (phase kickback for Grover compatibility)
+    qc.ccx(res_a, res_b, target)
+    
+    # Step 4: Uncompute comparators to clean ancillas
+    if num_internal > 0:
+        qc.append(comp_b.inverse(), x[:] + res_b[:] + internal_qubits)
+        qc.append(comp_a.inverse(), x[:] + res_a[:] + internal_qubits)
+    else:
+        qc.append(comp_b.inverse(), x[:] + res_b[:])
+        qc.append(comp_a.inverse(), x[:] + res_a[:])
+    
+    return qc
+
+
+def _add_diffusion_operator(qc, data_qubits):
+    """
+    Add Grover diffusion operator (reflection about |+⟩) on data qubits.
+    """
+    n = len(data_qubits)
+    qc.h(data_qubits)
+    qc.x(data_qubits)
+    qc.h(data_qubits[-1])
+    qc.mcx(list(data_qubits[:-1]), data_qubits[-1])
+    qc.h(data_qubits[-1])
+    qc.x(data_qubits)
+    qc.h(data_qubits)
+
+
+def run_arithmetic_integral(n, func_name, a, b, shots=10000, use_amplitude_amplification=False, num_grover_iterations=1):
     """
     Computes the integral over [a, b] using the arithmetic/comparison approach.
     
-    Algorithm (Compute-Uncompute style):
-    1. Prepare uniform superposition |+⟩ = (1/√N) Σ_j |j⟩
-    2. Mark states j in [a_int, b_int] (flip ancilla to |1⟩)  
-    3. Apply U_f† (inverse of state preparation)
-    4. Measure: P(main=0, mark=1) = (M/N) × |⟨χ_D|f⟩|²
+    Uses efficient IntegerComparator oracle (Miro's approach) instead of MCX per state.
     
-    The integral is then computed from the overlap.
+    Algorithm:
+    1. Prepare uniform superposition |+⟩ = (1/√N) Σ_j |j⟩
+    2. Mark states j in [a_int, b_int] using IntegerComparator oracle
+    3. (Optional) Apply Grover amplitude amplification
+    4. Apply U_f† (inverse of state preparation)
+    5. Measure: P(main=0, mark=1) ∝ |⟨χ_D|f⟩|²
+    
+    Args:
+        n: Number of qubits
+        func_name: Function to integrate
+        a, b: Integration bounds
+        shots: Number of measurement shots
+        use_amplitude_amplification: If True, apply Grover iterations
+        num_grover_iterations: Number of Grover iterations (auto-calculated if 0)
     """
     from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
     from qiskit_aer import AerSimulator
@@ -331,37 +419,67 @@ def run_arithmetic_integral(n, func_name, a, b, shots=10000):
     
     num_points = b_int - a_int + 1
     
+    # Build the range oracle
+    oracle = _build_range_oracle(n, a_int, b_int)
+    num_oracle_qubits = oracle.num_qubits
+    
+    # Calculate optimal Grover iterations if using amplitude amplification
+    if use_amplitude_amplification and num_grover_iterations == 0:
+        # Optimal iterations ≈ π/4 * sqrt(N/M)
+        if num_points > 0:
+            num_grover_iterations = max(1, int(np.pi/4 * np.sqrt(N / num_points)))
+        else:
+            num_grover_iterations = 1
+    
+    # Create main circuit
     main = QuantumRegister(n, 'main')
-    mark = QuantumRegister(1, 'mark')
+    # Ancillas for oracle: res_a(1) + res_b(1) + internal(n-1) + target(1)
+    num_internal = max(0, num_oracle_qubits - n - 3)
+    res_a = QuantumRegister(1, 'res_a')
+    res_b = QuantumRegister(1, 'res_b')
+    target = QuantumRegister(1, 'target')
     c_main = ClassicalRegister(n, 'c_main')
-    c_mark = ClassicalRegister(1, 'c_mark')
+    c_target = ClassicalRegister(1, 'c_target')
     
-    qc = QuantumCircuit(main, mark, c_main, c_mark)
+    if num_internal > 0:
+        internal = QuantumRegister(num_internal, 'internal')
+        qc = QuantumCircuit(main, res_a, res_b, internal, target, c_main, c_target)
+    else:
+        qc = QuantumCircuit(main, res_a, res_b, target, c_main, c_target)
     
-    # Step 1: Prepare uniform superposition
+    # Step 1: Prepare uniform superposition on main register
     qc.h(main)
-    qc.barrier()
+    qc.barrier(label='H⊗n')
     
-    # Step 2: Mark states in interval [a_int, b_int]
-    # IMPORTANT: Qiskit's mcx ctrl_state convention:
-    # ctrl_state[i] controls main[i], string is NOT reversed
-    for j in range(a_int, b_int + 1):
-        # Binary representation: LSB is main[0]
-        ctrl_state = format(j, f'0{n}b')  # Big-endian binary string
-        qc.mcx(main[:], mark[0], ctrl_state=ctrl_state)
+    # Step 2: Apply oracle (and optionally Grover iterations)
+    if use_amplitude_amplification:
+        for iteration in range(num_grover_iterations):
+            # Oracle: mark states in [a, b]
+            if num_internal > 0:
+                qc.compose(oracle, qubits=list(main) + list(res_a) + list(res_b) + list(internal) + list(target), inplace=True)
+            else:
+                qc.compose(oracle, qubits=list(main) + list(res_a) + list(res_b) + list(target), inplace=True)
+            
+            # Diffusion on main register
+            _add_diffusion_operator(qc, main)
+            qc.barrier(label=f'Grover {iteration+1}')
+    else:
+        # Just apply oracle once
+        if num_internal > 0:
+            qc.compose(oracle, qubits=list(main) + list(res_a) + list(res_b) + list(internal) + list(target), inplace=True)
+        else:
+            qc.compose(oracle, qubits=list(main) + list(res_a) + list(res_b) + list(target), inplace=True)
+        qc.barrier(label='Oracle')
     
-    qc.barrier()
-    
-    # Step 3: Apply U_f† using UnitaryGate (workaround for StatePreparation.inverse() segfault)
+    # Step 3: Apply U_f†
     U_f = _build_state_prep_unitary(f_vec)
     U_f_dag = np.conj(U_f.T)
     qc.append(UnitaryGate(U_f_dag, label='U_f†'), main[:])
-    
-    qc.barrier()
+    qc.barrier(label='U_f†')
     
     # Step 4: Measure
     qc.measure(main, c_main)
-    qc.measure(mark, c_mark)
+    qc.measure(target, c_target)
     
     # Run simulation
     sim = AerSimulator()
@@ -374,13 +492,13 @@ def run_arithmetic_integral(n, func_name, a, b, shots=10000):
     for bitstring, count in counts.items():
         parts = bitstring.split()
         if len(parts) == 2:
-            c_mark_str = parts[0]
+            c_target_str = parts[0]
             c_main_str = parts[1]
         else:
-            c_mark_str = bitstring[0]
+            c_target_str = bitstring[0]
             c_main_str = bitstring[1:]
         
-        if c_mark_str == '1':
+        if c_target_str == '1':
             prob_marked += count
             if all(c == '0' for c in c_main_str):
                 prob_zero_and_marked += count
@@ -388,14 +506,29 @@ def run_arithmetic_integral(n, func_name, a, b, shots=10000):
     prob_marked /= shots
     prob_zero_and_marked /= shots
     
-    # Derive overlap: P(main=0, mark=1) = (M/N) × |⟨χ_D|f⟩|²
-    if num_points > 0:
-        overlap_sq = prob_zero_and_marked * N / num_points
-        overlap = np.sqrt(max(0, overlap_sq))
+    # Derive overlap
+    if use_amplitude_amplification:
+        # With Grover, the marked probability is amplified
+        # Need to account for the amplification factor
+        # For k iterations: sin²((2k+1)θ) where sin²(θ) = M/N
+        theta = np.arcsin(np.sqrt(num_points / N))
+        amplified_prob = np.sin((2 * num_grover_iterations + 1) * theta) ** 2
+        
+        if amplified_prob > 0:
+            # Scale back to get original overlap
+            overlap_sq = prob_zero_and_marked / amplified_prob
+            overlap = np.sqrt(max(0, min(1, overlap_sq)))
+        else:
+            overlap = 0.0
     else:
-        overlap = 0.0
+        # Standard post-selection
+        if num_points > 0:
+            overlap_sq = prob_zero_and_marked * N / num_points
+            overlap = np.sqrt(max(0, overlap_sq))
+        else:
+            overlap = 0.0
     
-    # Integral estimation: I = ⟨χ_D|f⟩ × ||f|| × ||χ_D|| × dx
+    # Integral estimation
     dx = 1.0 / N
     d_norm = np.sqrt(num_points)
     integral_est = overlap * f_norm * d_norm * dx
@@ -416,7 +549,10 @@ def run_arithmetic_integral(n, func_name, a, b, shots=10000):
         "p_zero_and_marked": prob_zero_and_marked,
         "overlap": overlap,
         "depth": decomposed.depth(),
-        "gate_count": sum(decomposed.count_ops().values())
+        "gate_count": sum(decomposed.count_ops().values()),
+        "use_grover": use_amplitude_amplification,
+        "grover_iterations": num_grover_iterations if use_amplitude_amplification else 0,
+        "oracle_type": "IntegerComparator"
     }
 
 

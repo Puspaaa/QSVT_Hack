@@ -366,12 +366,28 @@ with config_tab:
                 
         elif "Arithmetic" in method:
             method = "Arithmetic/Comparison (Arbitrary Intervals)"
-            st.caption("*Works for any interval*")
+            st.caption("*Uses efficient IntegerComparator oracle*")
             a_val, b_val = st.slider(
                 "Select Interval [a, b]", 0.0, 1.0, (0.25, 0.75), 
                 step=0.01, key="arith_slider"
             )
             interval_id = None
+            
+            # Grover amplitude amplification option
+            st.markdown("**Advanced Options**")
+            use_grover = st.checkbox(
+                "Enable Grover Amplitude Amplification",
+                value=False,
+                help="Quadratic speedup for post-selection: O(√(N/M)) vs O(N/M)"
+            )
+            if use_grover:
+                grover_iterations = st.slider(
+                    "Grover Iterations (0 = auto)",
+                    0, 5, 0,
+                    help="0 = automatically calculate optimal iterations"
+                )
+            else:
+                grover_iterations = 0
             
         else:  # QSVT
             method = "QSVT Parity Decomposition (Arbitrary)"
@@ -381,6 +397,13 @@ with config_tab:
                 step=0.01
             )
             interval_id = None
+            use_grover = False
+            grover_iterations = 0
+
+# Initialize Grover variables for methods that don't use them
+if "Arithmetic" not in method:
+    use_grover = False
+    grover_iterations = 0
 
 # Helper function for plotting (defined outside tabs)
 def get_function_for_plot(func_name, n, custom_expr=None):
@@ -510,7 +533,9 @@ if run_button:
                 """)
             
             elif method == "Arithmetic/Comparison (Arbitrary Intervals)":
-                res = run_arithmetic_integral(n_qubits, effective_func, a_val, b_val, shots)
+                res = run_arithmetic_integral(n_qubits, effective_func, a_val, b_val, shots,
+                                              use_amplitude_amplification=use_grover,
+                                              num_grover_iterations=grover_iterations)
                 
                 if func_choice == "custom":
                     x_grid, y_vals = get_function_for_plot("custom", n_qubits, custom_func)
@@ -519,7 +544,10 @@ if run_button:
                     mask = (x_grid >= a_val) & (x_grid < b_val)
                     res['integral_exact'] = np.sum(y_vals[mask]) * dx
                 
-                st.success("Arithmetic/Comparison Method Complete")
+                if res.get('use_grover', False):
+                    st.success(f"Arithmetic/Comparison with Grover Amplification ({res['grover_iterations']} iterations)")
+                else:
+                    st.success("Arithmetic/Comparison Method Complete (IntegerComparator Oracle)")
                 
                 col1, col2, col3 = st.columns(3)
                 col1.metric(f"Exact [{a_val:.2f}, {b_val:.2f}]", f"{res['integral_exact']:.5f}")
@@ -527,25 +555,48 @@ if run_button:
                 rel_err = abs(res['error']/res['integral_exact'])*100 if res['integral_exact'] != 0 else 0
                 col3.metric("Relative Error", f"{rel_err:.1f}%")
                 
+                # Different output based on whether Grover was used
+                if res.get('use_grover', False):
+                    st.markdown(f"""
+                    **Algorithm with Grover Amplitude Amplification**
+                    
+                    | Step | Operation | Result |
+                    |------|-----------|--------|
+                    | 1 | Apply $H^{{\\otimes {n_qubits}}}$ | Uniform superposition over {2**n_qubits} states |
+                    | 2 | Oracle + Diffusion × {res['grover_iterations']} | Amplify marked states |
+                    | 3 | Apply $U_f^\\dagger$ | Compute overlap |
+                    | 4 | Measure | Extract amplified result |
+                    
+                    **Grover Amplification Details**
+                    
+                    | Parameter | Value |
+                    |-----------|-------|
+                    | Grover Iterations | {res['grover_iterations']} |
+                    | Expected Speedup | $O(\\sqrt{{N/M}}) = O(\\sqrt{{{2**n_qubits}/{res['num_points']}}}) \\approx {np.sqrt(2**n_qubits/max(1,res['num_points'])):.1f}\\times$ |
+                    | P(marked) after amplification | {res['post_select_rate']:.2%} |
+                    """)
+                else:
+                    st.markdown(f"""
+                    **Algorithm Execution Details**
+                    
+                    | Step | Operation | Result |
+                    |------|-----------|--------|
+                    | 1 | Apply $H^{{\\otimes {n_qubits}}}$ | Uniform superposition over {2**n_qubits} states |
+                    | 2 | IntegerComparator Oracle | Mark {res['num_points']} states in {res['interval_int']} |
+                    | 3 | Apply $U_f^\\dagger$ | Compute overlap with $|f\\rangle$ |
+                    | 4 | Measure & post-select | Keep target=1 results |
+                    """)
+                
                 st.markdown(f"""
-                **Algorithm Execution Details**
-                
-                | Step | Operation | Result |
-                |------|-----------|--------|
-                | 1 | Apply $H^{{\\otimes {n_qubits}}}$ | Uniform superposition over {2**n_qubits} states |
-                | 2 | Comparator marking | Mark {res['num_points']} states in {res['interval_int']} |
-                | 3 | Apply $U_f^\\dagger$ | Compute overlap with $|f\\rangle$ |
-                | 4 | Measure & post-select | Keep ancilla=1 results |
-                
                 **Measurement Statistics**
                 
                 | Quantity | Value | Meaning |
                 |----------|-------|---------|
-                | P(mark=1) | {res['post_select_rate']:.2%} | Post-selection rate |
-                | P(main=0, mark=1) | {res['p_zero_and_marked']:.4f} | Joint probability |
+                | P(target=1) | {res['post_select_rate']:.2%} | Post-selection rate |
+                | P(main=0, target=1) | {res['p_zero_and_marked']:.4f} | Joint probability |
                 | $|\\langle\\chi_D|f\\rangle|$ | {res['overlap']:.4f} | Extracted overlap |
                 
-                **Circuit Complexity:** Depth = {res['depth']}, Gates = {res['gate_count']}, MCX = {res['num_points']}
+                **Circuit:** Depth = {res['depth']}, Gates = {res['gate_count']}, Oracle = {res.get('oracle_type', 'IntegerComparator')}
                 """)
                 
                 # =============================================================
