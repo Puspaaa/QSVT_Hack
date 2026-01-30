@@ -9,3 +9,4 @@ ecos>=2.0.0
 pyqsp>=0.1.0
 pandas>=2.0.0
 scipy>=1.10.0
+pylatexenc>=2.10
