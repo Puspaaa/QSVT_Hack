@@ -128,6 +128,19 @@ with col1:
     - Degree $d$ increases with time step $t$
     - Requires $d+1$ rotation angles $\\{\\phi_0, \\phi_1, ..., \\phi_d\\}$
     """)
+    
+    # --- NEW THEORY SECTION ADDED HERE ---
+    st.info("""
+    **Implementation Detail: The "Symmetrization Trick"**
+    
+    QSVT requires the target polynomial $P(x)$ to have definite parity (be purely Even or Odd). However, our target evolution $f(x) = e^{t(x-1)}$ is neither.
+    
+    **Our Solution:** We approximate $f(x) \approx e^{t(|x|-1)}$ instead.
+    1. **Parity Constraint:** Using $|x|$ makes the function **Even**, satisfying QSVT requirements with a single circuit.
+    2. **Physics Preservation:** For physical modes, the eigenvalues of $A$ are positive ($\lambda \in [0, 1]$), so $|x|=x$ and the physics is exact.
+    3. **Noise Suppression:** Due to discretization, $A$ has negative eigenvalues ($\approx -0.8$) representing unphysical high-frequency noise. The fix forces these to decay smoothly ($e^{-t}$) instead of oscillating ($(-1)^t$), effectively stabilizing the simulation.
+    """)
+    # -------------------------------------
 
 with col2:
     if st.button("Visualize QSVT Circuit"):

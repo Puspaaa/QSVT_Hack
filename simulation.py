@@ -1,10 +1,5 @@
 import numpy as np
-from qiskit import transpile
-from qiskit_aer import AerSimulator
-from solvers import cvx_poly_coef, Angles_Fixed
-from quantum import QSVT_circuit_universal, Advection_Gate
-
-import numpy as np
+import matplotlib.pyplot as plt
 from qiskit import transpile
 from qiskit_aer import AerSimulator
 from solvers import cvx_poly_coef, Angles_Fixed

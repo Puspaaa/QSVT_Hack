@@ -240,4 +240,193 @@ def QSVT_circuit_2d(phi_seq, nx, ny, nu, init_state=None, measurement=True):
     
     return qc
 
+# [Append to the bottom of quantum.py]
+
+def Block_encoding_cosine(n):
+    """
+    Block encoding of the position operator C = cos(pi * x).
+    Uses 1 ancilla qubit.
+    """
+    anc = QuantumRegister(1, 'anc')
+    data = QuantumRegister(n, 'data')
+    qc = QuantumCircuit(anc, data, name="BE_Cos")
+    
+    # Linear Combination of Unitaries (V + V†)/2
+    # V = exp(i * pi * x)
+    
+    qc.h(anc)
+    
+    # Controlled-V (from |1>)
+    # Phase for qubit k (value 2^k) is pi * 2^k / 2^n = pi / 2^(n-k)
+    for k in range(n):
+        angle = np.pi / (2**(n - k))
+        qc.cp(angle, anc, data[k])
+        
+    # Controlled-V† (from |0>) -> X-Control-X
+    qc.x(anc)
+    for k in range(n):
+        angle = -np.pi / (2**(n - k))
+        qc.cp(angle, anc, data[k])
+    qc.x(anc)
+    
+    qc.h(anc)
+    return qc
+
+def QSVT_circuit_1_ancilla(phi_seq, n, block_encoding_gate, init_state=None, measurement=True):
+    """
+    QSVT circuit specifically for 1-ancilla Block Encodings (like Cosine).
+    """
+    sig = QuantumRegister(1, 'sig')
+    anc = QuantumRegister(1, 'anc') # Only 1 ancilla here
+    dat = QuantumRegister(n, 'dat')
+    
+    # Create registers for measurement
+    c_sig = ClassicalRegister(1, 'm_sig')
+    c_anc = ClassicalRegister(1, 'm_anc')
+    c_dat = ClassicalRegister(n, 'm_dat')
+    
+    qc = QuantumCircuit(sig, anc, dat, c_sig, c_anc, c_dat)
+    
+    # Initialize State
+    if init_state is not None:
+        qc.initialize(init_state, dat)
+        
+    # QSVT Sequence
+    U_gate = block_encoding_gate
+    U_dag = U_gate.inverse()
+    
+    qc.barrier()
+    qc.h(sig)
+    qc.rz(2 * phi_seq[0], sig)
+    
+    for i in range(1, len(phi_seq)):
+        # Apply U or U_dagger
+        op = U_gate if i % 2 == 1 else U_dag
+        qc.append(op, anc[:] + dat[:])
+        
+        # Projector-Controlled Rotation (Projector is |0><0| on Ancilla)
+        qc.x(anc)
+        # Controlled-RZ decomposition: 
+        # Since qiskit's crz is simple, we use it directly controlled on ancilla.
+        qc.crz(2 * phi_seq[i], anc[0], sig[0])
+        qc.x(anc)
+        qc.barrier()
+        
+    qc.h(sig)
+    
+    if measurement:
+        qc.measure(sig, c_sig)
+        qc.measure(anc, c_anc)
+        qc.measure(dat, c_dat)
+        
+    return qc
+
+
+# ==============================================================================
+# ARITHMETIC/COMPARISON APPROACH FOR ARBITRARY INTERVALS
+# ==============================================================================
+
+def comparator_circuit_less_than(n, threshold, ancilla_idx=0):
+    """
+    Creates a circuit that flips the ancilla qubit if the n-qubit register 
+    value j < threshold.
+    
+    Uses a decomposition approach based on checking bit-by-bit from MSB to LSB.
+    
+    Args:
+        n: Number of qubits in the main register
+        threshold: Integer threshold value (0 to 2^n - 1)
+        ancilla_idx: Index of the ancilla qubit (relative to ancilla register)
+    
+    Returns:
+        QuantumCircuit implementing j < threshold comparison
+    """
+    from qiskit import QuantumCircuit, QuantumRegister, AncillaRegister
+    
+    # We need auxiliary qubits for the comparison logic
+    # Number of auxiliary qubits needed: n (one for each bit comparison result)
+    main = QuantumRegister(n, 'main')
+    ancilla = QuantumRegister(1, 'ancilla')
+    aux = AncillaRegister(n, 'aux')  # Auxiliary qubits for comparison
+    
+    qc = QuantumCircuit(main, ancilla, aux, name=f"LT_{threshold}")
+    
+    # Convert threshold to binary (MSB first)
+    threshold_bits = [(threshold >> (n - 1 - i)) & 1 for i in range(n)]
+    
+    # Algorithm: j < threshold
+    # We compare bit by bit from MSB to LSB
+    # j < threshold iff:
+    #   - At some position i, j[i] < threshold[i] (i.e., j[i]=0 and threshold[i]=1)
+    #   - AND all higher positions are equal
+    
+    # For each bit position, compute if j is strictly less considering only bits up to that position
+    # aux[i] = 1 if (bits 0..i of j) < (bits 0..i of threshold)
+    
+    for i in range(n):
+        # Main qubit index (MSB is index 0 in threshold_bits, but we need to map to register)
+        qubit_idx = n - 1 - i  # Map: threshold_bits[i] corresponds to main[n-1-i]
+        
+        if threshold_bits[i] == 1:
+            # If threshold bit is 1:
+            # - j can be less if j[i]=0 (and previous bits were equal)
+            # - Or j was already less from previous bits
+            
+            if i == 0:
+                # First bit: j < threshold iff j[MSB] = 0 and threshold[MSB] = 1
+                qc.x(main[qubit_idx])
+                qc.cx(main[qubit_idx], aux[i])
+                qc.x(main[qubit_idx])
+            else:
+                # j < threshold up to bit i iff:
+                # (j was already less) OR (j was equal AND j[i]=0 AND threshold[i]=1)
+                
+                # First copy previous result
+                qc.cx(aux[i-1], aux[i])
+                
+                # Check if we become less at this bit
+                # This happens if we were NOT already less, bits were equal, and j[i]=0
+                qc.x(main[qubit_idx])
+                qc.x(aux[i-1])  # NOT of "already less"
+                
+                # Multi-controlled: if aux[i-1] was 0 (now 1 after X) and main[qubit_idx]=0 (now 1 after X)
+                # We need to check "equal so far AND j[i] < threshold[i]"
+                # Simplified: just use ccx
+                qc.ccx(aux[i-1], main[qubit_idx], aux[i])
+                
+                qc.x(aux[i-1])  # Restore
+                qc.x(main[qubit_idx])  # Restore
+        else:
+            # threshold_bits[i] == 0
+            # j[i] can only be >= threshold[i] here, so "less than" can only come from previous bits
+            if i == 0:
+                # First bit with threshold=0: can never be less at this point
+                pass  # aux[0] stays 0
+            else:
+                # Just propagate the previous result
+                qc.cx(aux[i-1], aux[i])
+    
+    # Final result is in aux[n-1]: flip ancilla based on this
+    qc.cx(aux[n-1], ancilla[0])
+    
+    # Uncompute auxiliary qubits (reverse order)
+    for i in range(n-1, -1, -1):
+        qubit_idx = n - 1 - i
+        
+        if threshold_bits[i] == 1:
+            if i == 0:
+                qc.x(main[qubit_idx])
+                qc.cx(main[qubit_idx], aux[i])
+                qc.x(main[qubit_idx])
+            else:
+                qc.x(main[qubit_idx])
+                qc.x(aux[i-1])
+                qc.ccx(aux[i-1], main[qubit_idx], aux[i])
+                qc.x(aux[i-1])
+                qc.x(main[qubit_idx])
+                qc.cx(aux[i-1], aux[i])
+        else:
+            if i > 0:
+                qc.cx(aux[i-1], aux[i])
+    
     return qc
