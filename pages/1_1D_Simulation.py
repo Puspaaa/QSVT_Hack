@@ -107,89 +107,30 @@ with col1:
 with col2:
     st.markdown("**Block Encoding Circuit (LCU):**")
     
-    # Custom matplotlib circuit diagram matching actual implementation
-    fig_block, ax_block = plt.subplots(figsize=(8, 5))
-    ax_block.set_xlim(0, 14)
-    ax_block.set_ylim(-0.5, 6.5)
-    ax_block.axis('off')
+    # Generate and display the actual Qiskit circuit
+    qc_block = Block_encoding_diffusion(n_qubits, nu)
     
-    # Draw qubit lines
-    labels = ['$ancilla_0$', '$ancilla_1$', '$data_0$', '$data_1$', '$data_2$', '$data_3$']
-    y_positions = [5, 4, 3, 2, 1, 0]
+    # Calculate proper figure size based on circuit depth
+    width = max(14, n_qubits * 2)
+    height = max(4, n_qubits * 0.6 + 2)
     
-    for label, y in zip(labels, y_positions):
-        ax_block.hlines(y, 1.5, 12.5, colors='black', linewidth=1.5)
-        ax_block.text(1.2, y, label, fontsize=9, ha='right', va='center', style='italic')
-    
-    # H gate on ancilla_0
-    rect_h1 = plt.Rectangle((2.0, 4.7), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_h1)
-    ax_block.text(2.3, 5, 'H', fontsize=10, ha='center', va='center', fontweight='bold')
-    
-    # Ry(2.5) on ancilla_1
-    rect_ry1 = plt.Rectangle((2.0, 3.65), 0.6, 0.7, fill=True, facecolor='#C39BD3', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_ry1)
-    ax_block.text(2.3, 4.1, '$R_Y$', fontsize=8, ha='center', va='center', fontweight='bold')
-    ax_block.text(2.3, 3.8, '2.5', fontsize=7, ha='center', va='center')
-    
-    # X gate on ancilla_0 (controlled)
-    rect_x1 = plt.Rectangle((3.5, 4.7), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_x1)
-    ax_block.text(3.8, 5, 'X', fontsize=10, ha='center', va='center', fontweight='bold')
-    ax_block.plot(3.8, 4, 'o', markersize=6, markerfacecolor='#C39BD3', markeredgecolor='black')
-    ax_block.vlines(3.8, 4, 4.7, colors='black', linewidth=1.5)
-    
-    # T_dg multi-qubit gate (controlled by ancillas)
-    rect_tdg = plt.Rectangle((5.0, -0.3), 1.2, 3.6, fill=True, facecolor='#C39BD3', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_tdg)
-    ax_block.text(5.6, 3, '0', fontsize=9, ha='center', va='center')
-    ax_block.text(5.6, 2, '1', fontsize=9, ha='center', va='center')
-    ax_block.text(5.6, 1.3, 'T_dg', fontsize=8, ha='center', va='center', fontweight='bold')
-    ax_block.text(5.6, 0.6, '2', fontsize=9, ha='center', va='center')
-    ax_block.text(5.6, 0, '3', fontsize=9, ha='center', va='center')
-    # Control lines
-    ax_block.plot(5.6, 5, 'ko', markersize=6)
-    ax_block.plot(5.6, 4, 'ko', markersize=6)
-    ax_block.vlines(5.6, 3.3, 5, colors='black', linewidth=1.5)
-    
-    # X gate on ancilla_0 (controlled)
-    rect_x2 = plt.Rectangle((7.2, 4.7), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_x2)
-    ax_block.text(7.5, 5, 'X', fontsize=10, ha='center', va='center', fontweight='bold')
-    ax_block.plot(7.5, 4, 'o', markersize=6, markerfacecolor='#C39BD3', markeredgecolor='black')
-    ax_block.vlines(7.5, 4, 4.7, colors='black', linewidth=1.5)
-    
-    # T multi-qubit gate (controlled by ancillas)
-    rect_t = plt.Rectangle((8.5, -0.3), 1.2, 3.6, fill=True, facecolor='#C39BD3', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_t)
-    ax_block.text(9.1, 3, '0', fontsize=9, ha='center', va='center')
-    ax_block.text(9.1, 2, '1', fontsize=9, ha='center', va='center')
-    ax_block.text(9.1, 1.3, 'T', fontsize=8, ha='center', va='center', fontweight='bold')
-    ax_block.text(9.1, 0.6, '2', fontsize=9, ha='center', va='center')
-    ax_block.text(9.1, 0, '3', fontsize=9, ha='center', va='center')
-    # Control lines
-    ax_block.plot(9.1, 5, 'ko', markersize=6)
-    ax_block.plot(9.1, 4, 'ko', markersize=6)
-    ax_block.vlines(9.1, 3.3, 5, colors='black', linewidth=1.5)
-    
-    # H gate on ancilla_0 (final)
-    rect_h2 = plt.Rectangle((10.8, 4.7), 0.6, 0.6, fill=True, facecolor='#85C1E2', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_h2)
-    ax_block.text(11.1, 5, 'H', fontsize=10, ha='center', va='center', fontweight='bold')
-    
-    # Ry(-2.5) on ancilla_1
-    rect_ry2 = plt.Rectangle((10.8, 3.65), 0.6, 0.7, fill=True, facecolor='#C39BD3', edgecolor='black', linewidth=1.5)
-    ax_block.add_patch(rect_ry2)
-    ax_block.text(11.1, 4.1, '$R_Y$', fontsize=8, ha='center', va='center', fontweight='bold')
-    ax_block.text(11.1, 3.8, '-2.5', fontsize=7, ha='center', va='center')
-    
-    ax_block.set_title('Block Encoding Circuit (LCU Decomposition)', fontsize=10, fontweight='bold')
+    fig_block, ax_block = plt.subplots(figsize=(width, height), dpi=150)
+    qc_block.draw('mpl', 
+                 style={'backgroundcolor': '#FFFFFF',
+                        'textcolor': '#000000',
+                        'gatetextcolor': '#000000',
+                        'subtextcolor': '#000000',
+                        'linecolor': '#000000',
+                        'creglinecolor': '#778899',
+                        'gatefacecolor': '#BB8FCE',
+                        'barrierfacecolor': '#CCCCCC'},
+                 fold=-1, 
+                 ax=ax_block,
+                 scale=1.0)
     
     plt.tight_layout()
     st.pyplot(fig_block, use_container_width=True)
     plt.close()
-    
-    st.caption("Controlled T and T† gates implement the cyclic shift operators for the diffusion stencil.")
 
 # Step 2: QSVT Circuit
 st.markdown("### Step 2: QSVT Polynomial Transformation")
@@ -220,81 +161,38 @@ with col1:
         """)
 
 with col2:
-    st.markdown("**QSVT Circuit Structure:**")
+    st.markdown("**QSVT Circuit:**")
     
-    # Custom matplotlib circuit diagram for QSVT
-    fig_qsvt, ax_qsvt = plt.subplots(figsize=(8, 4.5))
-    ax_qsvt.set_xlim(0, 14)
-    ax_qsvt.set_ylim(-0.5, 5.5)
-    ax_qsvt.axis('off')
+    # Generate and display the actual Qiskit QSVT circuit
+    # Use small degree for visualization clarity
+    deg_viz = 7
+    dummy_angles = np.ones(deg_viz + 1) * np.pi/4
     
-    # Draw qubit lines
-    labels_qsvt = ['signal', 'ancilla', 'data']
-    y_pos_qsvt = [4, 3, 1]
+    qc_qsvt = QSVT_circuit_universal(dummy_angles, n_qubits, nu, measurement=False)
     
-    for label, y in zip(labels_qsvt, y_pos_qsvt):
-        ax_qsvt.hlines(y, 0.8, 13.2, colors='black', linewidth=1.5)
-        ax_qsvt.text(0.3, y, label, fontsize=8, ha='right', va='center')
+    # Calculate proper figure size
+    width = max(16, n_qubits * 3)
+    height = max(6, n_qubits * 0.8 + 3)
     
-    # Data register bundle indicator
-    ax_qsvt.hlines(1.3, 0.8, 13.2, colors='black', linewidth=0.5, linestyle='--', alpha=0.5)
-    ax_qsvt.hlines(0.7, 0.8, 13.2, colors='black', linewidth=0.5, linestyle='--', alpha=0.5)
-    ax_qsvt.text(0.5, 1, f'({n_qubits})', fontsize=7, ha='center', va='center', color='gray')
-    
-    # φ₀ rotation on signal qubit
-    rect_phi0 = plt.Rectangle((1.2, 3.7), 0.8, 0.6, fill=True, facecolor='#E8DAEF', edgecolor='black', linewidth=1.5)
-    ax_qsvt.add_patch(rect_phi0)
-    ax_qsvt.text(1.6, 4, '$\\phi_0$', fontsize=9, ha='center', va='center', fontweight='bold')
-    
-    # Block encoding W (spans signal, ancilla, data)
-    rect_w1 = plt.Rectangle((2.5, 0.5), 1.2, 4, fill=True, facecolor='#AED6F1', edgecolor='black', linewidth=1.5)
-    ax_qsvt.add_patch(rect_w1)
-    ax_qsvt.text(3.1, 2.5, 'W', fontsize=12, ha='center', va='center', fontweight='bold')
-    ax_qsvt.text(3.1, 1.7, '(block)', fontsize=7, ha='center', va='center', color='gray')
-    
-    # φ₁ rotation
-    rect_phi1 = plt.Rectangle((4.2, 3.7), 0.8, 0.6, fill=True, facecolor='#E8DAEF', edgecolor='black', linewidth=1.5)
-    ax_qsvt.add_patch(rect_phi1)
-    ax_qsvt.text(4.6, 4, '$\\phi_1$', fontsize=9, ha='center', va='center', fontweight='bold')
-    
-    # W† block encoding
-    rect_wd = plt.Rectangle((5.4, 0.5), 1.2, 4, fill=True, facecolor='#AED6F1', edgecolor='black', linewidth=1.5)
-    ax_qsvt.add_patch(rect_wd)
-    ax_qsvt.text(6.0, 2.5, 'W†', fontsize=12, ha='center', va='center', fontweight='bold')
-    
-    # Ellipsis (...)
-    ax_qsvt.text(7.5, 2.5, '···', fontsize=16, ha='center', va='center', fontweight='bold')
-    
-    # φ_{d-1} rotation
-    rect_phid1 = plt.Rectangle((8.5, 3.7), 1.0, 0.6, fill=True, facecolor='#E8DAEF', edgecolor='black', linewidth=1.5)
-    ax_qsvt.add_patch(rect_phid1)
-    ax_qsvt.text(9.0, 4, '$\\phi_{d-1}$', fontsize=8, ha='center', va='center', fontweight='bold')
-    
-    # Final W
-    rect_wf = plt.Rectangle((10.0, 0.5), 1.2, 4, fill=True, facecolor='#AED6F1', edgecolor='black', linewidth=1.5)
-    ax_qsvt.add_patch(rect_wf)
-    ax_qsvt.text(10.6, 2.5, 'W', fontsize=12, ha='center', va='center', fontweight='bold')
-    
-    # φ_d rotation
-    rect_phid = plt.Rectangle((11.7, 3.7), 0.8, 0.6, fill=True, facecolor='#E8DAEF', edgecolor='black', linewidth=1.5)
-    ax_qsvt.add_patch(rect_phid)
-    ax_qsvt.text(12.1, 4, '$\\phi_d$', fontsize=9, ha='center', va='center', fontweight='bold')
-    
-    # Postselection indicator
-    ax_qsvt.text(13.5, 3.5, '→ |0⟩', fontsize=8, ha='left', va='center', color='#27AE60', fontweight='bold')
-    ax_qsvt.text(13.5, 3, '→ |00⟩', fontsize=8, ha='left', va='center', color='#27AE60', fontweight='bold')
-    
-    # Title and annotations
-    ax_qsvt.set_title('QSVT: Alternating Signal Rotations + Block Encodings', fontsize=10, fontweight='bold')
-    
-    # Legend annotation
-    ax_qsvt.text(7, -0.3, '$d+1$ angles $\\{\\phi_j\\}$ encode $P(A) = e^{t(A-I)}$', fontsize=8, ha='center', style='italic')
+    fig_qsvt, ax_qsvt = plt.subplots(figsize=(width, height), dpi=150)
+    qc_qsvt.draw('mpl',
+                style={'backgroundcolor': '#FFFFFF',
+                       'textcolor': '#000000',
+                       'gatetextcolor': '#000000',
+                       'subtextcolor': '#000000',
+                       'linecolor': '#000000',
+                       'creglinecolor': '#778899',
+                       'gatefacecolor': '#85C1E2',
+                       'barrierfacecolor': '#CCCCCC'},
+                fold=-1,
+                ax=ax_qsvt,
+                scale=0.9)
     
     plt.tight_layout()
     st.pyplot(fig_qsvt, use_container_width=True)
     plt.close()
     
-    st.caption(f"W = block encoding of A. Degree d scales with time t. Postselect signal and ancilla qubits.")
+    st.caption(f"QSVT with {len(dummy_angles)} angles on {n_qubits} qubits. Actual degree scales with t.")
 
 # Step 3: Angle Computation
 st.markdown("### Step 3: Compute QSVT Angles")
