@@ -7,274 +7,370 @@ from measurements import run_overlap_integral, run_qsvt_integral_arbitrary, run_
 from solvers import robust_poly_coef, Angles_Fixed
 
 st.set_page_config(page_title="Problem 2: Quantum Integration", layout="wide")
-st.title("🔬 Problem 2(a): Quantum Numerical Integration")
+
+st.title("Problem 2(a): Quantum Numerical Integration")
 
 # =============================================================================
-# THEORY SECTION - Expandable
+# PROBLEM STATEMENT
 # =============================================================================
-with st.expander("📚 **THEORY: Quantum Integration Overview** (Click to expand)", expanded=False):
+st.markdown(r"""
+**Objective:** Estimate the integral $I = \int_a^b f(x)\,dx$ using a quantum register of $n$ qubits.
+
+**Discretization:** The grid consists of $N = 2^n$ points with spacing $\Delta x = 1/N$:
+$$x_j = j\,\Delta x, \quad j = 0,1,\dots,N-1$$
+""")
+
+st.header("Quantum Formulation")
+
+col_form1, col_form2 = st.columns(2)
+
+with col_form1:
     st.markdown(r"""
-    ## The Problem: Numerical Integration
-    
-    We want to estimate the integral of a function $f(x)$ over a domain $D \subseteq [0,1)$:
-    
-    $$I = \int_D f(x)\, dx \approx \sum_{j \in D} f(x_j) \cdot \Delta x$$
-    
-    ### Quantum State Encoding
-    
-    With $n$ qubits, we discretize $[0,1)$ into $N = 2^n$ points: $x_j = j/N$ for $j = 0, 1, \ldots, N-1$.
-    
-    **Function state**: Encode $f(x)$ as amplitudes:
-    $$|f\rangle = \frac{1}{\|f\|} \sum_{j=0}^{N-1} f(x_j) |j\rangle$$
-    
-    **Indicator state**: Uniform superposition over interval $D$:
-    $$|\chi_D\rangle = \frac{1}{\sqrt{|D|}} \sum_{j \in D} |j\rangle$$
-    
-    ### The Quantum Approach
-    
-    The integral becomes an **inner product**:
-    $$I = \langle \chi_D | f \rangle \cdot \|f\| \cdot \sqrt{|D|} \cdot \Delta x$$
-    
-    We measure $|\langle \chi_D | f \rangle|^2$ using quantum circuits, then extract $I$.
+    **Function state** (from Problem 1):
+    $$|u\rangle = \frac{1}{\|u\|}\sum_{j=0}^{N-1} u(x_j, T)\,|j\rangle$$
     """)
 
-# Method-specific theory sections
-with st.expander("🔧 **METHOD 1: Compute-Uncompute** (Special Intervals)", expanded=False):
+with col_form2:
     st.markdown(r"""
-    ## Compute-Uncompute Method
+    **Interval indicator state:**
+    $$|D\rangle = \frac{1}{\sqrt{|D|}}\sum_{j\in D} |j\rangle$$
+    where $D = \{j : a \le j\,\Delta x \le b\}$
+    """)
+
+st.info(r"""
+**Key Result:** The integral reduces to an inner product:
+$$\int_a^b u(x,T)\,dx = \langle D|u\rangle \cdot \frac{\sqrt{|D|}\,\|u\|}{N}$$
+
+The problem therefore reduces to estimating the overlap $\langle D|u\rangle$, accessible via Hadamard test or amplitude estimation.
+""")
+
+st.markdown("---")
+
+# =============================================================================
+# THE THREE METHODS
+# =============================================================================
+st.header("Three Quantum Approaches")
+
+method_col1, method_col2, method_col3 = st.columns(3)
+
+with method_col1:
+    st.subheader("Method 1: Compute-Uncompute")
+    st.markdown("""
+    **Best for:** Special intervals
     
-    **Best for**: Half-intervals like $[0, 0.5]$ or $[0.25, 0.75]$ that align with qubit structure.
+    - Half-intervals: [0, 0.5], [0.25, 0.75]
+    - O(n) gates only
+    - < 1% error
     
-    ### Key Insight
-    For certain intervals, $|\chi_D\rangle$ can be prepared with just **O(n) Hadamard gates**:
+    *Fast but limited intervals*
+    """)
+
+with method_col2:
+    st.subheader("Method 2: Arithmetic/Comparison")
+    st.markdown("""
+    **Arbitrary intervals [a, b]**
+    
+    - MCX-based comparator circuit
+    - Complexity: O(M·n) gates
+    - Typical error: 3-15%
+    
+    *General but higher gate count*
+    """)
+
+with method_col3:
+    st.subheader("Method 3: QSVT Boxcar")
+    st.markdown("""
+    **Polynomial approximation**
+    
+    - Even/odd parity decomposition
+    - Complexity: O(d·n) gates
+    - Typical error: 5-30%
+    
+    *Smooth filter approximation*
+    """)
+
+# =============================================================================
+# EXPANDABLE THEORY SECTIONS
+# =============================================================================
+st.markdown("---")
+st.header("Technical Details")
+
+with st.expander("**State Encoding and Inner Product Formulation**", expanded=False):
+    st.markdown(r"""
+    ### Discretization
+    
+    With $n$ qubits, discretize $[0,1)$ into $N = 2^n$ grid points: $x_j = j/N$
+    
+    **Function state:**
+    $$|f\rangle = \frac{1}{\|f\|} \sum_{j=0}^{N-1} f(x_j) |j\rangle, \quad \|f\| = \sqrt{\sum_j |f(x_j)|^2}$$
+    
+    **Indicator state:**
+    $$|\chi_D\rangle = \frac{1}{\sqrt{|D|}} \sum_{j \in D} |j\rangle$$
+    
+    ### Integral as Inner Product
+    
+    The Riemann sum becomes:
+    $$I = \int_D f(x)\,dx \approx \Delta x \sum_{j \in D} f(x_j) = \|f\| \cdot \sqrt{|D|} \cdot \Delta x \cdot \langle \chi_D | f \rangle$$
+    
+    The overlap $|\langle \chi_D | f \rangle|^2$ is measurable via amplitude estimation.
+    """)
+
+with st.expander("**Constructing the Interval State |D⟩**", expanded=False):
+    st.markdown(r"""
+    ### Oracle-Based Interval Marking
+    
+    The set of valid indices $D$ is characterized by a Boolean function:
+    $$\chi_D(j) = \begin{cases} 1 & \text{if } a \le j\,\Delta x \le b \\ 0 & \text{otherwise} \end{cases}$$
+    
+    Since this involves only arithmetic comparisons, it can be efficiently implemented as a quantum oracle:
+    $$O_D\,|j\rangle|i\rangle = |j\rangle\,|i \oplus \chi_D(j)\rangle$$
+    
+    ### Post-Selection from Uniform Superposition
+    
+    Starting from the uniform superposition $|+\rangle^{\otimes n}$, measuring the ancilla after applying $O_D$ yields outcome 1 with probability:
+    $$\Pr(1) = \frac{|D|}{N}$$
+    
+    Conditioned on this outcome, the register collapses to the desired state $|D\rangle$.
+    
+    The expected number of repetitions required is:
+    $$O\left(\frac{N}{|D|}\right) = O\left(\frac{1}{b-a}\right)$$
+    
+    ### Speedup via Grover Amplitude Amplification
+    
+    Apply Grover-style amplitude amplification using:
+    - Oracle $O_D$ to mark indices in $D$
+    - Reflection about $|+\rangle^{\otimes n}$
+    
+    After amplification, the state rotates close to the target subspace:
+    $$|+\rangle^{\otimes n} \longrightarrow |D_{\text{approx}}\rangle = \alpha\,|D\rangle + \sqrt{1-\alpha^2}\,|g\rangle, \quad \alpha \approx 1$$
+    
+    where $|g\rangle$ has support only on indices outside $D$.
+    
+    Measuring the ancilla now yields outcome 1 with significantly higher probability, reducing complexity to:
+    $$O\left(\sqrt{\frac{N}{|D|}}\right) = O\left(\frac{1}{\sqrt{b-a}}\right)$$
+    
+    This is a **quadratic speedup** over naive post-selection.
+    """)
+
+with st.expander("**Method 1: Compute-Uncompute Circuit**", expanded=False):
+    st.markdown(r"""
+    ### Applicable Intervals
+    
+    Works efficiently for intervals aligned with qubit structure:
     
     | Interval | Preparation | Circuit |
     |----------|-------------|---------|
     | $[0, 0.5]$ (Left Half) | H on all qubits except MSB | `H⊗(n-1) ⊗ \|0⟩` |
-    | $[0.25, 0.75]$ (Middle Half) | H + CNOT pattern | Uses entanglement |
+    | $[0.25, 0.75]$ (Middle Half) | H + CNOT pattern | Entangled state |
     
-    ### Circuit Structure
-    ```
-    |0⟩ ──[U_f]──[U_D†]──[Measure]──
-    ```
+    ### Circuit
     
-    1. **Prepare** $|f\rangle$ from $|0\rangle^{\otimes n}$
-    2. **Apply** $U_D^\dagger$ (inverse of interval state prep)
-    3. **Measure** probability of $|0\rangle^{\otimes n}$
+    $$|0\rangle^{\otimes n} \xrightarrow{U_f} |f\rangle \xrightarrow{U_D^\dagger} \xrightarrow{\text{Measure}}$$
     
-    $$P(0^n) = |\langle \chi_D | f \rangle|^2$$
+    Probability of measuring all zeros: $P(0^n) = |\langle \chi_D | f \rangle|^2$
     
-    ### Advantages
-    - ✅ Very efficient: O(n) gates for special intervals
-    - ✅ High accuracy (< 1% error)
-    - ❌ Only works for specific interval structures
+    ### Complexity
+    - Gate count: $O(n)$ for special intervals
+    - Error: < 1% (limited by shot noise)
+    - Limitation: Only specific interval structures
     """)
 
-with st.expander("⚙️ **METHOD 2: Arithmetic/Comparison** (Arbitrary Intervals)", expanded=False):
+with st.expander("**Method 2: Arithmetic Comparator Circuit**", expanded=False):
     st.markdown(r"""
-    ## Arithmetic/Comparison Method
+    ### Oracle Implementation
     
-    **Best for**: Any arbitrary interval $[a, b] \subseteq [0, 1)$
+    This method implements the interval oracle $O_D$ using arithmetic comparison circuits.
+    The Boolean function $\chi_D(j)$ is realized via MCX gates that check $a \le j \le b$:
     
-    ### Key Insight
-    Use **quantum comparators** to mark basis states within the interval:
+    $$|j\rangle|0\rangle_{\text{anc}} \xrightarrow{O_D} |j\rangle|\chi_D(j)\rangle_{\text{anc}}$$
     
-    $$\text{Mark}(|j\rangle|0\rangle_{\text{anc}}) = |j\rangle|1\rangle_{\text{anc}} \quad \text{if } a \leq j < b$$
+    ### Circuit Flow
     
-    ### Circuit Structure
     ```
-    |0⟩^n ──[H^⊗n]──[Comparator]──[U_f†]──[Measure]──
-    |0⟩_anc ─────────────┘
+    |0⟩^n   ──[H^⊗n]──[O_D comparator]──[U_f†]──[Measure]
+    |0⟩_anc ─────────────────┘
     ```
     
-    ### Algorithm Steps
+    1. Create uniform superposition: $|+\rangle^{\otimes n} = \frac{1}{\sqrt{N}}\sum_j |j\rangle$
+    2. Apply oracle to mark states in interval
+    3. Apply inverse state preparation $U_f^\dagger$
+    4. Measure and postselect on ancilla = 1
     
-    1. **Uniform Superposition**: Apply $H^{\otimes n}$ to create
-       $$|+\rangle = \frac{1}{\sqrt{N}} \sum_{j=0}^{N-1} |j\rangle |0\rangle_{\text{anc}}$$
+    ### Post-Selection Analysis
     
-    2. **Comparator Circuit**: For each $j \in [a_{int}, b_{int}]$, apply MCX:
-       $$|j\rangle|0\rangle \xrightarrow{\text{MCX}} |j\rangle|1\rangle$$
-       Uses multi-controlled X gates with control state matching $j$.
+    The joint probability of measuring main register = 0 and ancilla = 1:
+    $$P(\text{main}=0, \text{mark}=1) = \frac{|D|}{N} \cdot |\langle D | f \rangle|^2$$
     
-    3. **Inverse State Prep**: Apply $U_f^\dagger$ to compute overlap
+    The post-selection rate (probability of ancilla = 1):
+    $$\Pr(\text{mark}=1) = \frac{|D|}{N}$$
     
-    4. **Measure & Post-Select**: Keep results where ancilla = 1
-    
-    ### Probability Analysis
-    
-    $$P(\text{main}=0, \text{mark}=1) = \frac{M}{N} \cdot |\langle \chi_D | f \rangle|^2$$
-    
-    where $M = |D|$ is the number of points in the interval.
-    
-    ### Advantages
-    - ✅ Works for **any** interval [a, b]
-    - ✅ Straightforward implementation
-    - ❌ Gate count scales with interval size: O(M · n) MCX gates
-    - ❌ Post-selection reduces effective sample count
+    ### Complexity
+    - **Gate count:** $O(M \cdot n)$ where $M = |D|$ points in interval
+    - **Post-selection overhead:** $O(N/|D|) = O(1/(b-a))$ repetitions
+    - **With amplitude amplification:** $O(\sqrt{N/|D|})$ — quadratic speedup
+    - **Error:** 3-15% (depends on interval alignment and shot noise)
     """)
 
-with st.expander("🌀 **METHOD 3: QSVT Parity Decomposition** (Advanced)", expanded=False):
+with st.expander("**Method 3: QSVT Boxcar Filter**", expanded=False):
     st.markdown(r"""
-    ## QSVT Parity Decomposition
+    ### Approach
     
-    **Best for**: Smooth approximations of arbitrary indicator functions.
-    
-    ### Key Insight
-    The indicator function (boxcar) $\chi_{[a,b]}(x)$ can be approximated by polynomials:
+    Approximate the indicator function $\chi_{[a,b]}(x)$ with polynomials:
     
     $$\chi_{[a,b]}(x) \approx P_{\text{even}}(x) + P_{\text{odd}}(x)$$
     
     where:
     - $P_{\text{even}}(x) = \frac{1}{2}[\chi(x) + \chi(-x)]$ — symmetric part
-    - $P_{\text{odd}}(x) = \frac{1}{2}[\chi(x) - \chi(-x)]$ — anti-symmetric part
+    - $P_{\text{odd}}(x) = \frac{1}{2}[\chi(x) - \chi(-x)]$ — antisymmetric part
     
-    ### Why Parity Decomposition?
+    ### Parity Requirement
     
-    QSVT naturally implements polynomials of **definite parity**:
-    - Even polynomials: $P(-x) = P(x)$
-    - Odd polynomials: $P(-x) = -P(x)$
+    QSVT implements polynomials of definite parity:
+    - Even: $P(-x) = P(x)$
+    - Odd: $P(-x) = -P(x)$
     
-    The boxcar function is neither, so we split and run two circuits.
+    The boxcar has no parity, so we decompose and run two circuits.
     
     ### Block Encoding
     
-    We encode the **position operator** as $\cos(\pi x)$:
-    
+    Encode the position operator via $\cos(\pi x)$:
     $$\langle j | \cos(\pi \hat{X}) | k \rangle = \cos(\pi j / N) \delta_{jk}$$
     
-    This maps $x \in [0, 1)$ to eigenvalues $\lambda \in [-1, 1]$.
+    Maps $x \in [0, 1)$ to eigenvalues $\lambda \in [-1, 1]$.
     
-    ### Circuit Flow
+    ### Circuit
     ```
-    |f⟩ ──[QSVT_even]──[Measure]── → amplitude_even
-    |f⟩ ──[QSVT_odd]──[Measure]──  → amplitude_odd
+    |f> --[QSVT_even]--[Measure]-- -> amp_even
+    |f> --[QSVT_odd]--[Measure]--  -> amp_odd
     
-    Total = amplitude_even + amplitude_odd
+    Total = amp_even + amp_odd
     ```
     
-    ### Advantages
-    - ✅ Polynomial approximation can be very accurate
-    - ✅ Leverages powerful QSVT framework
-    - ❌ Requires solving for QSP angles
-    - ❌ Even polynomial extraction has known issues for symmetric intervals
+    ### Complexity
+    - Gate count: $O(d \cdot n)$ where $d$ = polynomial degree
+    - Error: 5-30% (depends on Gibbs phenomenon at discontinuities)
+    - Advantage: Leverages full QSVT framework
     """)
 
 st.markdown("---")
 
 # =============================================================================
-# CONFIGURATION SECTION
+# INTERACTIVE DEMO SECTION
 # =============================================================================
-st.header("⚙️ Configuration")
+st.markdown("### Configuration")
 
-col1, col2 = st.columns(2)
+# Use tabs for organization
+config_tab, viz_tab = st.tabs(["Setup", "Function Preview"])
 
-with col1:
-    st.subheader("📊 Function Selection")
-    
-    func_type = st.radio(
-        "Function Type",
-        ["Preset Functions", "Custom Function"],
-        horizontal=True
-    )
-    
-    if func_type == "Preset Functions":
-        func_choice = st.selectbox(
-            "Select f(x)", 
-            ["sin", "gaussian", "linear", "quadratic", "step", "sawtooth", "cosine"],
-            help="Choose from preset test functions"
+with config_tab:
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Function to Integrate**")
+        
+        func_type = st.radio(
+            "Function Type",
+            ["Preset Functions", "Custom Function"],
+            horizontal=True,
+            label_visibility="collapsed"
         )
-        custom_func = None
         
-        # Show function formula
-        func_formulas = {
-            "sin": r"$f(x) = \sin(2\pi x) + 2$",
-            "gaussian": r"$f(x) = e^{-20(x-0.5)^2}$",
-            "linear": r"$f(x) = 2x + 0.5$",
-            "quadratic": r"$f(x) = 4x(1-x) + 0.5$",
-            "step": r"$f(x) = \begin{cases} 1 & x < 0.5 \\ 2 & x \geq 0.5 \end{cases}$",
-            "sawtooth": r"$f(x) = (x \mod 0.25) \times 4 + 0.5$",
-            "cosine": r"$f(x) = \cos(2\pi x) + 1.5$"
-        }
-        st.markdown(f"**Formula**: {func_formulas.get(func_choice, '')}")
-        
-    else:
-        st.markdown("**Enter a Python expression using `x` as variable:**")
-        custom_func = st.text_input(
-            "Custom f(x)", 
-            value="np.sin(3*np.pi*x) + 1.5",
-            help="Use numpy functions with 'np.' prefix. x ranges from 0 to 1."
-        )
-        func_choice = "custom"
-        
-        # Validate custom function
-        try:
-            x_test = np.linspace(0, 1, 10)
-            y_test = eval(custom_func)
-            if np.any(y_test < 0):
-                st.warning("⚠️ Function has negative values. Results may be less accurate.")
-            st.success("✅ Function syntax is valid!")
-        except Exception as e:
-            st.error(f"❌ Invalid function: {e}")
+        if func_type == "Preset Functions":
+            func_choice = st.selectbox(
+                "Select f(x)", 
+                ["sin", "gaussian", "linear", "quadratic", "step", "sawtooth", "cosine"],
+                help="Choose from preset test functions"
+            )
             custom_func = None
-    
-    # Quantum parameters
-    st.markdown("---")
-    n_qubits = st.slider("Number of Qubits (n)", 4, 10, 6, 
-                         help=f"Grid resolution: 2^n = {2**6} points")
-    st.caption(f"📐 Grid: {2**n_qubits} points, Δx = {1/2**n_qubits:.6f}")
-    
-    shots = st.select_slider("Measurement Shots", 
-                             options=[1000, 5000, 10000, 20000, 50000], 
-                             value=10000)
-
-with col2:
-    st.subheader("🎯 Method & Interval")
-    
-    method = st.radio(
-        "Integration Method", 
-        ["Compute-Uncompute (Special Intervals)", 
-         "Arithmetic/Comparison (Arbitrary Intervals)",
-         "QSVT Parity Decomposition (Arbitrary)"],
-        help="Choose the quantum algorithm for integration"
-    )
-    
-    # Method-specific interval selection
-    if method == "Compute-Uncompute (Special Intervals)":
-        interval_choice = st.radio(
-            "Select Domain D",
-            ["Left Half [0, 0.5]", "Middle Half [0.25, 0.75]"],
-            help="These intervals have efficient O(n) state preparation"
-        )
-        if "Left" in interval_choice:
-            interval_id = "left_half"
-            a_val, b_val = 0.0, 0.5
-        else:
-            interval_id = "middle_half"
-            a_val, b_val = 0.25, 0.75
             
-    elif method == "Arithmetic/Comparison (Arbitrary Intervals)":
-        st.info("🔧 Uses comparator circuits with multi-controlled gates")
-        a_val, b_val = st.slider(
-            "Select Interval [a, b]", 0.0, 1.0, (0.25, 0.75), 
-            step=0.01, key="arith_slider"
-        )
-        interval_id = None
+            # Show function formula
+            func_formulas = {
+                "sin": r"$f(x) = \sin(2\pi x) + 2$",
+                "gaussian": r"$f(x) = e^{-20(x-0.5)^2}$",
+                "linear": r"$f(x) = 2x + 0.5$",
+                "quadratic": r"$f(x) = 4x(1-x) + 0.5$",
+                "step": r"$f(x) = \begin{cases} 1 & x < 0.5 \\ 2 & x \geq 0.5 \end{cases}$",
+                "sawtooth": r"$f(x) = (x \mod 0.25) \times 4 + 0.5$",
+                "cosine": r"$f(x) = \cos(2\pi x) + 1.5$"
+            }
+            st.latex(func_formulas.get(func_choice, ''))
+            
+        else:
+            st.markdown("**Python expression (use x as variable):**")
+            custom_func = st.text_input(
+                "Custom f(x)", 
+                value="np.sin(3*np.pi*x) + 1.5",
+                help="Use numpy functions with 'np.' prefix. x in [0,1]."
+            )
+            func_choice = "custom"
+            
+            # Validate custom function
+            try:
+                x_test = np.linspace(0, 1, 10)
+                y_test = eval(custom_func)
+                if np.any(y_test < 0):
+                    st.warning("Warning: Function has negative values. Results may be less accurate.")
+                st.success("Function syntax is valid")
+            except Exception as e:
+                st.error(f"Invalid function: {e}")
+                custom_func = None
         
-    else:  # QSVT
-        st.info("🌀 Decomposes boxcar into Even + Odd polynomial components")
-        a_val, b_val = st.slider(
-            "Select Interval [a, b]", 0.0, 1.0, (0.3, 0.7),
-            step=0.01
+        # Quantum parameters in a nice box
+        st.markdown("**Quantum Parameters**")
+        param_col1, param_col2 = st.columns(2)
+        with param_col1:
+            n_qubits = st.slider("Qubits (n)", 4, 10, 6)
+        with param_col2:
+            shots = st.select_slider("Shots", options=[1000, 5000, 10000, 20000, 50000], value=10000)
+        
+        st.caption(f"Grid: {2**n_qubits} points, dx = {1/2**n_qubits:.6f}")
+
+    with col2:
+        st.markdown("**Method and Interval**")
+        
+        method = st.radio(
+            "Integration Method", 
+            ["Compute-Uncompute (Special Intervals)", 
+             "Arithmetic/Comparison (Any Interval)",
+             "QSVT Parity Decomposition"],
+            help="Choose the quantum algorithm"
         )
-        interval_id = None
+        
+        # Method-specific interval selection
+        if "Compute-Uncompute" in method:
+            method = "Compute-Uncompute (Special Intervals)"
+            st.caption("*Efficient for half-intervals*")
+            interval_choice = st.radio(
+                "Select Domain D",
+                ["Left Half [0, 0.5]", "Middle Half [0.25, 0.75]"],
+                help="These intervals have efficient O(n) state preparation"
+            )
+            if "Left" in interval_choice:
+                interval_id = "left_half"
+                a_val, b_val = 0.0, 0.5
+            else:
+                interval_id = "middle_half"
+                a_val, b_val = 0.25, 0.75
+                
+        elif "Arithmetic" in method:
+            method = "Arithmetic/Comparison (Arbitrary Intervals)"
+            st.caption("*Works for any interval*")
+            a_val, b_val = st.slider(
+                "Select Interval [a, b]", 0.0, 1.0, (0.25, 0.75), 
+                step=0.01, key="arith_slider"
+            )
+            interval_id = None
+            
+        else:  # QSVT
+            method = "QSVT Parity Decomposition (Arbitrary)"
+            st.caption("*Polynomial approximation*")
+            a_val, b_val = st.slider(
+                "Select Interval [a, b]", 0.0, 1.0, (0.3, 0.7),
+                step=0.01
+            )
+            interval_id = None
 
-# =============================================================================
-# FUNCTION VISUALIZATION
-# =============================================================================
-st.markdown("---")
-st.header("📈 Function & Integration Domain Visualization")
-
-# Generate function data for plotting
+# Helper function for plotting (defined outside tabs)
 def get_function_for_plot(func_name, n, custom_expr=None):
     """Get function values for plotting."""
     N = 2**n
@@ -306,59 +402,56 @@ def get_function_for_plot(func_name, n, custom_expr=None):
     
     return x, y
 
-# Create visualization
-x_plot, y_plot = get_function_for_plot(func_choice, n_qubits, custom_func)
+with viz_tab:
+    st.markdown("#### Function Preview with Integration Domain")
+    
+    # Create visualization
+    x_plot, y_plot = get_function_for_plot(func_choice, n_qubits, custom_func)
 
-fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=(10, 4))
 
-# Plot full function
-ax.plot(x_plot, y_plot, 'b-', linewidth=2, label='f(x)')
+    # Plot full function
+    ax.plot(x_plot, y_plot, 'b-', linewidth=2, label='f(x)')
 
-# Highlight integration domain
-mask = (x_plot >= a_val) & (x_plot < b_val)
-ax.fill_between(x_plot, 0, y_plot, where=mask, alpha=0.3, color='green', 
-                label=f'Integration Domain [{a_val:.2f}, {b_val:.2f}]')
+    # Highlight integration domain
+    mask = (x_plot >= a_val) & (x_plot < b_val)
+    ax.fill_between(x_plot, 0, y_plot, where=mask, alpha=0.3, color='green', 
+                    label=f'∫ Domain [{a_val:.2f}, {b_val:.2f}]')
 
-# Mark interval boundaries
-ax.axvline(x=a_val, color='red', linestyle='--', linewidth=1.5, alpha=0.7)
-ax.axvline(x=b_val, color='red', linestyle='--', linewidth=1.5, alpha=0.7)
+    # Mark interval boundaries
+    ax.axvline(x=a_val, color='red', linestyle='--', linewidth=1.5, alpha=0.7)
+    ax.axvline(x=b_val, color='red', linestyle='--', linewidth=1.5, alpha=0.7)
 
-# Compute exact integral for display
-dx = 1.0 / len(x_plot)
-exact_integral = np.sum(y_plot[mask]) * dx
+    # Compute exact integral for display
+    dx = 1.0 / len(x_plot)
+    exact_integral = np.sum(y_plot[mask]) * dx
 
-ax.set_xlabel('x', fontsize=12)
-ax.set_ylabel('f(x)', fontsize=12)
-ax.set_title(f'Function f(x) with Integration Domain D = [{a_val:.2f}, {b_val:.2f}]\n'
-             f'Exact Integral ≈ {exact_integral:.4f}', fontsize=12)
-ax.legend(loc='upper right')
-ax.grid(True, alpha=0.3)
-ax.set_xlim(0, 1)
-ax.set_ylim(0, max(y_plot) * 1.1)
+    ax.set_xlabel('x', fontsize=12)
+    ax.set_ylabel('f(x)', fontsize=12)
+    ax.set_title(f'f(x) over [{a_val:.2f}, {b_val:.2f}] — Exact ∫ ≈ {exact_integral:.4f}', fontsize=11)
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, max(y_plot) * 1.1)
 
-st.pyplot(fig)
-plt.close()
-
-# Show grid points
-with st.expander("🔍 View Discretization Grid Points"):
+    st.pyplot(fig)
+    plt.close()
+    
+    # Grid info
     N = 2**n_qubits
     a_int = int(np.floor(a_val * N))
     b_int = min(int(np.floor(b_val * N)), N-1)
-    st.markdown(f"""
-    **Grid Information:**
-    - Total grid points: N = {N}
-    - Interval $[{a_val:.2f}, {b_val:.2f}]$ maps to indices **[{a_int}, {b_int}]**
-    - Points in domain: **{b_int - a_int + 1}** out of {N}
-    - Grid spacing: Δx = 1/{N} = {1/N:.6f}
-    """)
+    st.caption(f"Grid: {N} points | Interval indices [{a_int}, {b_int}] ({b_int - a_int + 1} points)")
 
 # =============================================================================
 # EXECUTION
 # =============================================================================
 st.markdown("---")
-st.header("🚀 Run Quantum Integration")
 
-run_button = st.button("▶️ Execute Quantum Circuit", type="primary", use_container_width=True)
+# Run button
+col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+with col_btn2:
+    run_button = st.button("Run Quantum Integration", type="primary", use_container_width=True)
 
 if run_button:
     # Validate inputs
@@ -384,16 +477,16 @@ if run_button:
                         mask = (x_grid >= 0.25) & (x_grid < 0.75)
                     res['integral_exact'] = np.sum(y_vals[mask]) * dx
                 
-                st.success("✅ Compute-Uncompute Complete!")
+                st.success("Compute-Uncompute Complete")
                 
                 col1, col2, col3 = st.columns(3)
-                col1.metric("📊 Exact Integral", f"{res['integral_exact']:.5f}")
-                col2.metric("⚛️ Quantum Estimate", f"{res['integral_est']:.5f}")
+                col1.metric("Exact Integral", f"{res['integral_exact']:.5f}")
+                col2.metric("Quantum Estimate", f"{res['integral_est']:.5f}")
                 rel_err = abs(res['error']/res['integral_exact'])*100 if res['integral_exact'] != 0 else 0
-                col3.metric("📉 Relative Error", f"{rel_err:.2f}%")
+                col3.metric("Relative Error", f"{rel_err:.2f}%")
                 
                 st.markdown(f"""
-                ### 📋 Results Analysis
+                **Results Analysis**
                 
                 | Metric | Value |
                 |--------|-------|
@@ -401,8 +494,7 @@ if run_button:
                 | Gate Count | {res['gate_count_window']} |
                 | Overlap $|\\langle\\chi_D|f\\rangle|^2$ | {(res['integral_est']/(res['integral_exact']+1e-10))**2:.4f} |
                 
-                **Why it works**: The interval state $|\\chi_D\\rangle$ can be prepared with just 
-                O(n) = O({n_qubits}) Hadamard gates because the interval aligns with the qubit structure.
+                The interval state can be prepared with O(n) = O({n_qubits}) gates due to qubit structure alignment.
                 """)
             
             elif method == "Arithmetic/Comparison (Arbitrary Intervals)":
@@ -415,18 +507,16 @@ if run_button:
                     mask = (x_grid >= a_val) & (x_grid < b_val)
                     res['integral_exact'] = np.sum(y_vals[mask]) * dx
                 
-                st.success("✅ Arithmetic/Comparison Method Complete!")
+                st.success("Arithmetic/Comparison Method Complete")
                 
                 col1, col2, col3 = st.columns(3)
-                col1.metric(f"📊 Exact [{a_val:.2f}, {b_val:.2f}]", f"{res['integral_exact']:.5f}")
-                col2.metric("⚛️ Quantum Estimate", f"{res['integral_est']:.5f}")
+                col1.metric(f"Exact [{a_val:.2f}, {b_val:.2f}]", f"{res['integral_exact']:.5f}")
+                col2.metric("Quantum Estimate", f"{res['integral_est']:.5f}")
                 rel_err = abs(res['error']/res['integral_exact'])*100 if res['integral_exact'] != 0 else 0
-                col3.metric("📉 Relative Error", f"{rel_err:.1f}%")
+                col3.metric("Relative Error", f"{rel_err:.1f}%")
                 
                 st.markdown(f"""
-                ### 📋 Algorithm Execution Details
-                
-                #### Step-by-Step Breakdown
+                **Algorithm Execution Details**
                 
                 | Step | Operation | Result |
                 |------|-----------|--------|
@@ -435,18 +525,15 @@ if run_button:
                 | 3 | Apply $U_f^\\dagger$ | Compute overlap with $|f\\rangle$ |
                 | 4 | Measure & post-select | Keep ancilla=1 results |
                 
-                #### Measurement Statistics
+                **Measurement Statistics**
                 
                 | Quantity | Value | Meaning |
                 |----------|-------|---------|
-                | P(mark=1) | {res['post_select_rate']:.2%} | Post-selection success rate |
+                | P(mark=1) | {res['post_select_rate']:.2%} | Post-selection rate |
                 | P(main=0, mark=1) | {res['p_zero_and_marked']:.4f} | Joint probability |
                 | $|\\langle\\chi_D|f\\rangle|$ | {res['overlap']:.4f} | Extracted overlap |
                 
-                #### Circuit Complexity
-                - **Depth**: {res['depth']} layers
-                - **Gates**: {res['gate_count']} total
-                - **MCX gates**: {res['num_points']} (one per marked state)
+                **Circuit Complexity:** Depth = {res['depth']}, Gates = {res['gate_count']}, MCX = {res['num_points']}
                 """)
                 
             else:  # QSVT
@@ -459,35 +546,34 @@ if run_button:
                     mask = (x_grid >= a_val) & (x_grid < b_val)
                     res['integral_exact'] = np.sum(y_vals[mask]) * dx
                 
-                st.success("✅ QSVT Decomposition Complete!")
+                st.success("QSVT Parity Decomposition Complete")
                 
                 col1, col2, col3 = st.columns(3)
-                col1.metric(f"📊 Exact [{a_val:.2f}, {b_val:.2f}]", f"{res['integral_exact']:.5f}")
-                col2.metric("⚛️ QSVT Estimate", f"{res['integral_est']:.5f}")
-                col3.metric("📐 Poly Degrees", f"Even:{res['deg_even']} / Odd:{res['deg_odd']}")
+                col1.metric(f"Exact [{a_val:.2f}, {b_val:.2f}]", f"{res['integral_exact']:.5f}")
+                col2.metric("QSVT Estimate", f"{res['integral_est']:.5f}")
+                col3.metric("Poly Degrees", f"Even:{res['deg_even']} / Odd:{res['deg_odd']}")
                 
                 st.markdown(f"""
-                ### 📋 Parity Decomposition Results
+                **Parity Decomposition Results**
                 
-                The boxcar indicator function is split into parity components:
+                Boxcar indicator split into parity components:
                 
-                | Component | Value | Polynomial Degree |
-                |-----------|-------|-------------------|
+                | Component | Value | Degree |
+                |-----------|-------|--------|
                 | Even $P_{{even}}(\\lambda)$ | {res['val_even']:.5f} | {res['deg_even']} |
                 | Odd $P_{{odd}}(\\lambda)$ | {res['val_odd']:.5f} | {res['deg_odd']} |
-                | **Total** | **{res['integral_est']:.5f}** | — |
+                | **Total** | **{res['integral_est']:.5f}** | |
                 
-                **Note**: For symmetric intervals around 0.5, the odd component vanishes
-                and the even polynomial carries all information.
+                Note: For symmetric intervals around 0.5, the odd component vanishes.
                 """)
                 
                 # =============================================================
-                # QSVT BOXCAR VISUALIZATION (integrated from separate page)
+                # QSVT BOXCAR VISUALIZATION
                 # =============================================================
                 st.markdown("---")
-                st.subheader("🔲 QSVT Boxcar Function Visualization")
+                st.markdown("#### Boxcar Polynomial Approximation")
                 
-                with st.expander("📈 **View Polynomial Approximation Details**", expanded=True):
+                with st.expander("**View Polynomial Approximation Details**", expanded=True):
                     # Compute visualization data
                     N_vis = 2**n_qubits
                     x_grid_vis = np.linspace(0, 1, N_vis, endpoint=False)
@@ -513,7 +599,7 @@ if run_button:
                     tab1, tab2, tab3 = st.tabs(["Position Space", "Eigenvalue Space", "Parity Components"])
                     
                     with tab1:
-                        st.markdown("**Boxcar Window Function in Position Space**")
+                        st.markdown("**Boxcar Window in Position Space**")
                         
                         fig1, ax1 = plt.subplots(figsize=(10, 4))
                         
@@ -634,7 +720,7 @@ if run_button:
                                 plt.close()
                 
                 # Discrete grid amplitudes
-                with st.expander("📋 **Discrete Grid Amplitudes**", expanded=False):
+                with st.expander("**Discrete Grid Amplitudes**", expanded=False):
                     if coef_even is not None and coef_odd is not None:
                         poly_at_grid = chebval(lambda_grid, coef_even) + chebval(lambda_grid, coef_odd)
                         
@@ -656,67 +742,51 @@ if run_button:
                         # Table
                         data = []
                         for j in range(N_vis):
-                            in_interval = "✅" if (x_grid_vis[j] >= a_val and x_grid_vis[j] <= b_val) else "❌"
+                            in_interval = "Yes" if (x_grid_vis[j] >= a_val and x_grid_vis[j] <= b_val) else "No"
                             data.append({
                                 "Index |j⟩": j,
                                 "Position x": f"{x_grid_vis[j]:.4f}",
                                 "λ = cos(πx)": f"{lambda_grid[j]:.4f}",
                                 "P(λ)": f"{poly_at_grid[j]:.4f}",
-                                "In Interval?": in_interval
+                                "In [a,b]": in_interval
                             })
                         st.dataframe(data, use_container_width=True)
 
 # =============================================================================
-# COMPARISON TABLE
+# COMPARISON & Q&A (at the bottom for reference)
 # =============================================================================
 st.markdown("---")
-with st.expander("📊 **Method Comparison Table**", expanded=False):
-    comparison_data = {
-        "Method": ["Compute-Uncompute", "Arithmetic/Comparison", "QSVT Parity"],
-        "Interval Support": ["Special (half-intervals)", "Arbitrary [a,b]", "Arbitrary [a,b]"],
-        "Gate Complexity": ["O(n)", "O(M·n) where M=|D|", "O(d·n) where d=degree"],
-        "Accuracy": ["< 1% error", "3-15% error", "Variable (5-30%)"],
-        "Post-selection": ["No", "Yes (~M/N rate)", "Yes"],
-        "Best Use Case": ["Half-intervals", "Any interval", "Smooth approximations"]
-    }
-    st.table(pd.DataFrame(comparison_data))
+st.header("Reference Materials")
 
-# =============================================================================
-# Q&A REFERENCE
-# =============================================================================
-st.markdown("---")
-with st.expander("❓ **Q&A Quick Reference** (For Presentation)", expanded=False):
-    st.markdown(r"""
-    ### Likely Questions & Answers
-    
-    **Q: Why use quantum for integration?**
-    > Classical: O(N) operations for N grid points. Quantum: Polynomial in n = log(N) qubits 
-    > for structured problems. Potential exponential speedup for certain function classes.
-    
-    **Q: What's the quantum advantage here?**
-    > The function is encoded in O(N) amplitudes using only n qubits. Inner products 
-    > (integrals) can be estimated with O(1/ε²) measurements regardless of N.
-    
-    **Q: Why does Compute-Uncompute work so well?**
-    > When intervals align with qubit structure, the indicator state |χ_D⟩ has a simple 
-    > tensor product form. Only O(n) gates needed vs O(N) classically.
-    
-    **Q: What are the limitations of the Arithmetic/Comparison method?**
-    > Gate count scales with interval size M. Post-selection reduces effective shots.
-    > For M ≈ N/2, about 50% of shots are discarded.
-    
-    **Q: Why split into even/odd for QSVT?**
-    > QSVT naturally implements polynomials of definite parity. The boxcar function
-    > χ[a,b] has mixed parity, requiring two separate circuits.
-    
-    **Q: How does error scale with qubits?**
-    > More qubits → finer grid → smaller discretization error. 
-    > Statistical error from shots: σ ∝ 1/√(shots).
-    
-    **Q: Can this be run on real quantum hardware?**
-    > Yes, but current NISQ devices have limited qubits and high noise.
-    > Error mitigation techniques would be needed for practical use.
-    """)
+ref_col1, ref_col2 = st.columns(2)
 
+with ref_col1:
+    with st.expander("**Method Comparison**", expanded=False):
+        comparison_data = {
+            "Method": ["Compute-Uncompute", "Arithmetic/Comparison", "QSVT Parity"],
+            "Intervals": ["Special only", "Any [a,b]", "Any [a,b]"],
+            "Gates": ["O(n)", "O(M·n)", "O(d·n)"],
+            "Error": ["< 1%", "3-15%", "5-30%"],
+            "Best For": ["Half-intervals", "Arbitrary", "Smooth approx."]
+        }
+        st.table(pd.DataFrame(comparison_data))
+
+with ref_col2:
+    with st.expander("**Q&A Reference**", expanded=False):
+        st.markdown(r"""
+        **Q: Why quantum for integration?**
+        > Encode $N$ values in $\log N$ qubits. Inner products in $O(1/\varepsilon^2)$ shots.
+        
+        **Q: What's the speedup?**
+        > Potential exponential in state prep, polynomial in measurements.
+        
+        **Q: Limitations?**
+        > Readout is expensive. Post-selection reduces samples. NISQ noise.
+        
+        **Q: QSVT even/odd split?**
+        > QSVT needs definite parity. Boxcar has mixed parity → split.
+        """)
+
+# Footer
 st.markdown("---")
-st.caption("💡 **Tip**: Expand the theory sections above for detailed explanations during Q&A!")
+st.caption("**Note**: Method 2 (Arithmetic/Comparison) provides the clearest demonstration of arbitrary interval integration.")

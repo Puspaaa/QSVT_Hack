@@ -1,199 +1,88 @@
-# 🌊 Quantum Advection-Diffusion Wind Tunnel
+# Quantum Singular Value Transformation for Scientific Computing
 
-A Streamlit application that simulates the advection-diffusion equation using quantum computing techniques, comparing three different solution methods: Exact Fourier, Classical Finite Difference, and Quantum Split-Step with QSVT (Quantum Singular Value Transformation).
+A Streamlit application demonstrating QSVT for **PDE solving** and **numerical integration** — built for QHack 2026.
 
-## Overview
+## Quick Start
 
-This application demonstrates how quantum computing can be applied to solve partial differential equations (PDEs) in computational fluid dynamics. The advection-diffusion equation models how quantities like heat, concentration, or pollutants spread and move through space:
-
+```bash
+pip install -r requirements.txt
+streamlit run app.py
 ```
-∂u/∂t = ν∂²u/∂x² - v∂u/∂x
-```
 
-where:
-- **ν** (nu) is the viscosity/diffusion coefficient
-- **v** is the advection velocity  
-- **u(x,t)** is the quantity being transported
+## 5-Minute Presentation Flow
 
-## Features
-
-### 📊 Three Solution Methods
-1. **Exact Fourier Solution** - Reference solution using Fourier transforms
-2. **Classical Finite Difference** - Traditional numerical method with Crank-Nicolson scheme
-3. **Quantum Split-Step** - Quantum circuit-based simulation using operator splitting
-
-### 🔬 Quantum Circuit Implementation
-- **Diffusion Block Encoding** - QFT-based implementation of the diffusion operator
-- **Advection Gate** - Unitary shift operator for transport
-- **QSVT Enhancement** - Polynomial transformation for improved accuracy
-
-### 🎯 Interactive Features
-- Real-time parameter adjustment (qubits, viscosity, velocity, time)
-- Visual comparison plots with error analysis
-- Circuit depth and gate count statistics
-- Comprehensive mathematical background
+| Time | Demo | Key Takeaway |
+|------|------|--------------|
+| **0:00-0:30** | Landing Page | The challenge: exponential state space; the insight: QSVT polynomial transformations |
+| **0:30-2:00** | 1D PDE Solver | Watch quantum simulate advection-diffusion; compare to classical |
+| **2:00-4:30** | Problem 2: Integration | Three methods, arbitrary intervals, run comparison |
+| **4:30-5:00** | Q&A | Use "Technical Deep Dive" expanders for details |
 
 ## Project Structure
 
 ```
 QSVT_Hack/
-├── app.py                           # Home/landing page (entry point)
+├── app.py                    # Landing page + QSVT overview
 ├── pages/
-│   ├── 1_1D_Simulation.py           # 1D Advection-Diffusion simulation
-│   └── 2_2D_Simulation.py           # 2D Diffusion-Advection simulation (in development)
-├── simulation.py                    # 1D PDE simulation logic
-├── quantum.py                       # Quantum circuit definitions
-├── solvers.py                       # Polynomial solving and angle computation
-├── requirements.txt                 # Python dependencies
-└── README.md                        # This file
+│   ├── 1_1D_Simulation.py    # 1D advection-diffusion solver
+│   ├── 2_2D_Simulation.py    # 2D extension
+│   └── 3_Problem_2_Integrals.py  # Quantum integration (3 methods)
+├── quantum.py                # Quantum circuits (QSVT, block encoding)
+├── measurements.py           # Integration measurement routines
+├── simulation.py             # PDE simulation logic
+├── solvers.py                # Polynomial/angle computation
+└── requirements.txt          # Dependencies
 ```
 
-### Multi-Page Structure
+## Demo 1: Advection-Diffusion PDE
 
-This Streamlit app uses the multi-page feature to organize different simulations:
+Solves the 1D/2D advection-diffusion equation:
 
-1. **Home Page** (`app.py`) - Overview of the QSVT algorithm and navigation
-2. **1D Simulation** (`pages/1_1D_Simulation.py`) - Full 1D advection-diffusion solver ✅ Complete
-3. **2D Simulation** (`pages/2_2D_Simulation.py`) - 2D PDE solver (under development)
-
-Use the sidebar to navigate between pages in Streamlit.
-
-## Installation
-
-### Prerequisites
-- Python 3.8 or higher
-- pip package manager
-
-### Setup
-
-1. Clone the repository:
-```bash
-git clone https://github.com/Puspaaa/QSVT_Hack.git
-cd QSVT_Hack
+```
+∂u/∂t = ν∇²u - c·∇u
 ```
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+**Quantum approach:**
+1. **Block-encode** the Laplacian as a unitary subblock
+2. **QSVT** applies the time evolution polynomial P(A) = e^{(A-I)t}
+3. **Measure** to extract the evolved state
 
-## Usage
+## Demo 2: Quantum Integration (Problem 2)
 
-### Running the Application
+Computes ∫_a^b f(x) dx using three methods:
 
-Start the Streamlit app:
-```bash
-streamlit run app.py
-```
+| Method | Intervals | Complexity | Error |
+|--------|-----------|------------|-------|
+| **Compute-Uncompute** | Special (half-intervals) | O(n) | < 1% |
+| **Arithmetic/Comparison** | ANY [a, b] | O(M·n) | 3-15% |
+| **QSVT Parity** | ANY [a, b] | O(d·n) | 5-30% |
 
-The application will open in your default web browser at `http://localhost:8501`.
+**Key insight:** Integration is an inner product → quantum overlap estimation!
 
-### Using the Interface
+## Technical Highlights
 
-1. **Adjust Parameters** (Left Sidebar):
-   - **Number of Qubits** (3-8): Controls grid resolution (Grid points = 2^n_qubits)
-   - **Viscosity** (0.001-0.5): Diffusion coefficient
-   - **Velocity** (-2.0 to 2.0): Advection velocity
-   - **Final Time** (0.1-5.0): Simulation time
-
-2. **Run Simulation** (Results Tab):
-   - Click "🚀 Run Simulation" to execute all three methods
-   - View comparison plots and error metrics
-   - See performance statistics
-
-3. **Explore Circuit Details** (Circuit Details Tab):
-   - Review quantum circuit architecture
-   - Check circuit depth and gate counts
-   - Generate combined circuit visualization
-
-4. **Learn the Math** (Mathematical Background Tab):
-   - Understand the underlying equations
-   - Compare solution methods
-   - Explore QSVT polynomial approximations
-
-## Technical Details
-
-### Quantum Circuit Components
-
-**Diffusion Block Encoding:**
-```
-QFT → Phase Rotations (exp(-ν*dt*k²)) → Inverse QFT
-```
-
-**Advection Gate:**
-```
-QFT → Phase Rotations (exp(-i*v*dt*k)) → Inverse QFT
-```
-
-**Split-Step Evolution:**
-```
-U(Δt) = exp(-ν*Δt/2 * ∂²/∂x²) · exp(-v*Δt * ∂/∂x) · exp(-ν*Δt/2 * ∂²/∂x²)
-```
-
-### Dependencies
-
-- **streamlit**: Web application framework
-- **qiskit**: Quantum computing SDK
-- **qiskit-aer**: Quantum circuit simulator
-- **numpy**: Numerical computing
-- **matplotlib**: Plotting and visualization
-- **scipy**: Scientific computing
-- **cvxpy**: Convex optimization for QSVT coefficients
-
-## Examples
-
-### Example 1: Low Viscosity, High Velocity
-```python
-qubits = 5
-viscosity = 0.01
-velocity = 1.5
-time = 1.0
-```
-Result: Dominant advection with minimal spreading
-
-### Example 2: High Viscosity, Low Velocity
-```python
-qubits = 5
-viscosity = 0.2
-velocity = 0.2
-time = 2.0
-```
-Result: Dominant diffusion with significant spreading
-
-## Performance Notes
-
-- **Grid Resolution**: Higher qubit counts provide finer resolution but increase computation time
-- **Quantum Simulation**: Currently uses classical simulation of quantum circuits (Qiskit Aer)
-- **Real Quantum Hardware**: Code is compatible with IBM Quantum backends (requires additional setup)
-
-## Future Enhancements
-
-- [ ] Integration with real quantum hardware (IBMQ)
-- [ ] Support for 2D and 3D advection-diffusion
-- [ ] Adaptive time-stepping algorithms
-- [ ] Error mitigation techniques
-- [ ] Advanced QSVT polynomial optimization
-- [ ] Parallel quantum circuit execution
+- **Qiskit 1.x** with AerSimulator backend
+- **QSVT implementation** with Chebyshev polynomial approximation
+- **Robust angle finding** via CVXPY optimization
+- **MCX comparator** for arbitrary interval marking
 
 ## References
 
-### Scientific Background
-- **Advection-Diffusion Equation**: Classical PDE in fluid dynamics
-- **Operator Splitting**: Strang splitting for time integration
-- **QSVT**: Quantum Singular Value Transformation framework
+- [Grand Unification of Quantum Algorithms (Martyn et al.)](https://arxiv.org/abs/2105.02859)
+- [QSVT Tutorial (Gilyen et al.)](https://arxiv.org/abs/1806.01838)
 
-### Quantum Computing
-- **Qiskit Documentation**: https://qiskit.org/documentation/
-- **QSVT Papers**: Martyn et al., "Grand Unification of Quantum Algorithms"
-- **Block Encoding**: Techniques for encoding matrices as unitaries
+## Installation
 
-## Contributing
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+The application will open at `http://localhost:8501`.
 
 ## License
 
-This project is open source and available under the MIT License.
+MIT License - QHack 2026
 
 ## Acknowledgments
 

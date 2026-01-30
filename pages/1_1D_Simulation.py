@@ -6,20 +6,54 @@ from quantum import QSVT_circuit_universal, Block_encoding_diffusion, Advection_
 from solvers import cvx_poly_coef, Angles_Fixed
 
 st.set_page_config(page_title="QSVT PDE Solver - 1D", layout="wide")
-st.title("1D Advection-Diffusion: Quantum Singular Value Transformation")
 
+st.title("1D Advection-Diffusion via QSVT")
+
+# Equation and method summary
 st.markdown(r"""
-### Theory Snapshot (1D)
+**PDE:** $\partial_t u = \nu \partial_x^2 u - c \partial_x u$ on periodic domain $[0,1)$
 
-$$\partial_t u = \nu \partial_x^2 u - c\,\partial_x u,\quad x\in[0,1)$$
-
-**Operator flow:**
-$$u_0 \;\xrightarrow{\text{Block-encode }A}\; \text{QSVT }P(A) \;\xrightarrow{\text{QFT advection}}\; u(t)$$
-
-- Grid: $N=2^n$ points in $n$ qubits
-- Diffusion: sparse Laplacian via LCU block-encoding
-- Advection: phase shifts in Fourier space
+**Algorithm:** Split-step method with QSVT-based diffusion operator and QFT-based advection.
 """)
+
+# The PDE details
+with st.expander("**Theoretical Background**", expanded=False):
+    st.markdown(r"""
+    ### Operator Splitting
+    
+    The evolution operator factorizes as:
+    $$e^{t(\nu \partial_x^2 - c\partial_x)} \approx e^{t\nu\partial_x^2} \cdot e^{-tc\partial_x}$$
+    
+    ### Diffusion via Block-Encoded Laplacian
+    
+    The discrete Laplacian with periodic BCs:
+    $$L_{jk} = \frac{1}{(\Delta x)^2}\begin{cases} -2 & j=k \\ 1 & |j-k|=1 \mod N \\ 0 & \text{else} \end{cases}$$
+    
+    Normalized: $A = I + \frac{\nu \Delta t}{2(\Delta x)^2} L$, with eigenvalues in $[0,1]$.
+    
+    **LCU Block Encoding:** $A = a_0 I + a_+ S + a_- S^\dagger$ where $S$ is the cyclic shift.
+    
+    ### QSVT Time Evolution
+    
+    Target polynomial: $P(x) = e^{t(x-1)}$ approximated by Chebyshev expansion.
+    
+    **Parity fix:** Use $\tilde{P}(x) = e^{t(|x|-1)}$ (even function) for QSVT compatibility.
+    
+    ### Advection via QFT
+    
+    In Fourier space, advection is diagonal: $\hat{u}_k(t) = e^{-ikct}\hat{u}_k(0)$
+    
+    Implemented as phase rotations between QFT and inverse QFT.
+    
+    ### Complexity
+    
+    | Component | Gate Count |
+    |-----------|------------|
+    | Block encoding | $O(n)$ |
+    | QSVT ($d$ angles) | $O(d \cdot n)$ |
+    | QFT | $O(n^2)$ |
+    | **Total per step** | $O(d \cdot n + n^2)$ |
+    """)
 
 if 'angles_computed' not in st.session_state:
     st.session_state.angles_computed = False
@@ -28,68 +62,51 @@ if 'phi_sequences' not in st.session_state:
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("Quantum Hardware")
+    st.markdown("### Configuration")
+    st.markdown("---")
+    
+    st.markdown("**Qubits**")
     n_qubits = st.slider("Number of Qubits", min_value=3, max_value=8, value=6, step=1)
-    st.caption(f"Grid resolution: {2**n_qubits} points")
-    st.header("Physics Parameters")
-    nu = st.slider("Viscosity (ν)", 0.005, 0.05, 0.02, step=0.001)
+    st.caption(f"Grid: N = {2**n_qubits} points")
+    
+    st.markdown("---")
+    st.markdown("**Physics Parameters**")
+    nu = st.slider("Viscosity (v)", 0.005, 0.05, 0.02, step=0.001)
     c = st.slider("Advection Velocity (c)", -1.0, 1.0, 0.5, step=0.05)
     
-    st.header("Time Evolution")
+    st.markdown("---")
+    st.markdown("**Time Evolution**")
     col_t1, col_t2 = st.columns(2)
     with col_t1:
-        t_max = st.slider("Max Time Steps", 10, 100, 30, step=10)
+        t_max = st.slider("Max Steps", 10, 100, 30, step=10)
     with col_t2:
-        n_timesteps = st.slider("Number of Time Steps", 5, 20, 7, step=1)
+        n_timesteps = st.slider("Snapshots", 5, 20, 7, step=1)
     
     time_steps_display = [int(i * t_max / (n_timesteps - 1)) for i in range(n_timesteps)]
-    st.info(f"Visualizing {len(time_steps_display)} time steps: {time_steps_display}")
+    st.caption(f"{len(time_steps_display)} time snapshots")
 
 # --- MAIN CONTENT ---
+st.markdown("---")
 
-st.header("Step 1: The Advection-Diffusion Equation")
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.markdown("""
-    1D advection–diffusion with periodic boundary conditions:
-    """)
-    st.latex(r"\frac{\partial u}{\partial t} = \nu \frac{\partial^2 u}{\partial x^2} - c \frac{\partial u}{\partial x}")
-    st.markdown("""
-    - $u(x,t)$: field value
-    - $\nu$: diffusion (spreading)
-    - $c$: advection (shift)
-    - $x \in [0,1)$ periodic
-    """)
-
-with col2:
-    st.info(f"""
-    **Current Parameters:**
-    - ν = {nu}
-    - c = {c}
-    - Grid points: {2**n_qubits}
-    - dx = {1/(2**n_qubits):.4f}
-    - dt ≈ {0.9*(1/(2**n_qubits))**2/(2*nu):.5f}
-    """)
-
-# Section 2: Block Encoding Circuit
-st.header("Step 2: Block-Encoded Unitary for Diffusion")
-st.markdown("""
-The diffusion operator is encoded using **Linear Combination of Unitaries (LCU)** with 2 ancilla qubits:
+# Step 1: Block Encoding Circuit
+st.markdown("### Step 1: Block Encoding (LCU)")
+st.markdown(r"""
+The normalized diffusion operator is decomposed as a **Linear Combination of Unitaries**:
 """)
 
 col1, col2 = st.columns([1, 1])
 with col1:
     st.latex(r"A = a_0 I + a_+ S + a_- S^\dagger")
-    st.markdown("""
-    - $S$ = Cyclic shift operator (implemented via QFT)
-    - $a_0, a_+, a_-$ = Coefficients from finite difference stencil
-    - Ancilla postselection on $|00\\rangle$ projects onto $A$
+    st.markdown(r"""
+    - $S$ = Cyclic shift operator
+    - Coefficients derived from finite-difference stencil
+    - Requires 2 ancilla qubits for LCU
+    - Postselection on $|00\rangle$ yields $A$
     """)
 
 with col2:
-    if st.button("Visualize Block Encoding Circuit"):
-        with st.spinner("Generating circuit diagram..."):
+    if st.button("Show Block Encoding Circuit"):
+        with st.spinner("Generating circuit..."):
             qc_block = Block_encoding_diffusion(n_qubits, nu)
             
             # Calculate proper figure size based on circuit depth
@@ -114,37 +131,36 @@ with col2:
             st.pyplot(fig, use_container_width=True)
             plt.close()
 
-# Section 3: QSVT Circuit
-st.header("Step 3: QSVT Circuit Structure")
-st.markdown("""
-**Quantum Singular Value Transformation** applies a polynomial transformation $P(A)$ to the block-encoded operator:
+# Step 2: QSVT Circuit
+st.markdown("### Step 2: QSVT Polynomial Transformation")
+st.markdown(r"""
+Apply polynomial $P(A)$ to the block-encoded operator via alternating signal rotations:
 """)
 
 col1, col2 = st.columns([1, 1])
 with col1:
     st.latex(r"P(A) = e^{(A-I) \cdot t} \approx \sum_{k=0}^d c_k T_k(A)")
-    st.markdown("""
-    - Chebyshev polynomial approximation of matrix exponential
-    - Degree $d$ increases with time step $t$
-    - Requires $d+1$ rotation angles $\\{\\phi_0, \\phi_1, ..., \\phi_d\\}$
+    st.markdown(r"""
+    - Chebyshev polynomial approximation
+    - Degree $d \sim O(t/\epsilon)$ for accuracy $\epsilon$
+    - Angles $\{\phi_j\}_{j=0}^d$ encode the polynomial
     """)
     
-    # --- NEW THEORY SECTION ADDED HERE ---
-    st.info("""
-    **Implementation Detail: The "Symmetrization Trick"**
-    
-    QSVT requires the target polynomial $P(x)$ to have definite parity (be purely Even or Odd). However, our target evolution $f(x) = e^{t(x-1)}$ is neither.
-    
-    **Our Solution:** We approximate $f(x) \approx e^{t(|x|-1)}$ instead.
-    1. **Parity Constraint:** Using $|x|$ makes the function **Even**, satisfying QSVT requirements with a single circuit.
-    2. **Physics Preservation:** For physical modes, the eigenvalues of $A$ are positive ($\lambda \in [0, 1]$), so $|x|=x$ and the physics is exact.
-    3. **Noise Suppression:** Due to discretization, $A$ has negative eigenvalues ($\approx -0.8$) representing unphysical high-frequency noise. The fix forces these to decay smoothly ($e^{-t}$) instead of oscillating ($(-1)^t$), effectively stabilizing the simulation.
-    """)
-    # -------------------------------------
+    with st.expander("**Technical Detail: Parity Constraint**"):
+        st.markdown(r"""
+        QSVT requires definite parity. The target $f(x) = e^{t(x-1)}$ has no parity.
+        
+        **Solution:** Use $\tilde{f}(x) = e^{t(|x|-1)}$ (even function).
+        
+        - For physical eigenvalues $\lambda \in [0,1]$: $|\lambda| = \lambda$, exact
+        - For spurious negative eigenvalues: smooth decay instead of oscillation
+        
+        This stabilizes the simulation without affecting physical modes.
+        """)
 
 with col2:
-    if st.button("Visualize QSVT Circuit"):
-        with st.spinner("Generating QSVT diagram..."):
+    if st.button("Show QSVT Circuit"):
+        with st.spinner("Generating circuit..."):
             # Use small degree for visualization clarity
             deg_viz = 7
             dummy_angles = np.ones(deg_viz + 1) * np.pi/4
@@ -173,18 +189,16 @@ with col2:
             st.pyplot(fig, use_container_width=True)
             plt.close()
             
-            st.info(f"Showing QSVT with {len(dummy_angles)} angles on {n_qubits} qubits. Actual circuits will have more angles for larger time steps.")
+            st.caption(f"QSVT with {len(dummy_angles)} angles on {n_qubits} qubits. Actual degree scales with t.")
 
-# Section 4: Angle Computation
-st.header("Step 4: Compute QSVT Angles")
-st.markdown("""
-The rotation angles are computed by solving a constrained optimization problem to approximate the target polynomial.
-""")
+# Step 3: Angle Computation
+st.markdown("### Step 3: Compute QSVT Angles")
+st.markdown(r"Angles $\{\phi_j\}$ are computed via convex optimization over Chebyshev coefficients.")
 
 calc_angles_btn = st.button("Calculate Angles for Selected Time Steps", type="primary")
 
 if calc_angles_btn:
-    with st.spinner("Computing QSVT angles..."):
+    with st.spinner("Computing QSVT angles via CVXPY..."):
         st.session_state.phi_sequences = {}
         progress_bar = st.progress(0)
         
@@ -192,27 +206,27 @@ if calc_angles_btn:
             if t == 0:
                 continue
             
-            # [FIX] FORCE EVEN PARITY
+            # Force even parity polynomial
             deg = int(t + 8)
             if deg % 2 != 0:
                 deg += 1
             
             try:
-                # [FIX] SYMMETRIC TARGET
+                # Symmetric target for parity constraint
                 target_f = lambda x: np.exp(t * (np.abs(x) - 1))
                 coef = cvx_poly_coef(target_f, [0, 1], deg, epsil=1e-5)
                 phi_seq = Angles_Fixed(coef)
                 st.session_state.phi_sequences[t] = phi_seq
             except Exception as e:
-                st.error(f"Failed to compute angles for t={t}: {e}")
+                st.error(f"Failed for t={t}: {e}")
             
             progress_bar.progress((idx + 1) / len(time_steps_display))
         
         st.session_state.angles_computed = True
-        st.success(f"✓ Successfully computed angles for {len(st.session_state.phi_sequences)} time steps!")
+        st.success(f"Computed angles for {len(st.session_state.phi_sequences)} time steps")
 
 if st.session_state.angles_computed:
-    st.markdown("**Angle Sequence Information:**")
+    st.markdown("**Computed Angle Sequences:**")
     angle_data = []
     for t, phi in st.session_state.phi_sequences.items():
         angle_data.append({
@@ -223,20 +237,9 @@ if st.session_state.angles_computed:
         })
     st.dataframe(angle_data, use_container_width=True)
 
-# Section 5: Initial Condition & Simulation
+# Step 4: Initial Condition & Simulation
 if st.session_state.angles_computed:
-    st.header("Step 5: Choose Initial Condition and Simulate")
-    
-    # Display time-color legend
-    st.markdown("### Time Step Color Legend")
-    colors = plt.cm.viridis(np.linspace(0, 1, len(time_steps_display)))
-    legend_cols = st.columns(min(7, len(time_steps_display)))
-    for idx, (t, col) in enumerate(zip(time_steps_display, colors)):
-        with legend_cols[idx % len(legend_cols)]:
-            color_hex = '#{:02x}{:02x}{:02x}'.format(int(col[0]*255), int(col[1]*255), int(col[2]*255))
-            st.markdown(f"<span style='color:{color_hex}'>■</span> t = {t}", unsafe_allow_html=True)
-    
-    st.markdown("---")
+    st.markdown("### Step 4: Initial Condition and Simulation")
     
     col1, col2 = st.columns([2, 1])
     
@@ -286,7 +289,7 @@ if st.session_state.angles_computed:
                 test_x = np.linspace(0, 1, 10)
                 test_result = eval(custom_expr, {"x": test_x, "np": np})
                 u0_func = lambda x: eval(custom_expr, {"x": x, "np": np})
-                st.success("✓ Valid function")
+                st.success("Valid function")
             except Exception as e:
                 st.error(f"Invalid function: {e}")
                 u0_func = lambda x: np.exp(-100 * (x - 0.3)**2)
@@ -448,7 +451,7 @@ if st.session_state.angles_computed:
             progress_bar.progress(idx / len(steps))
         
         # Final status
-        status_text.markdown("**Simulation Complete!** 🎉")
+        status_text.markdown("**Simulation Complete**")
         progress_bar.progress(1.0)
         
         # Add final legend with line styles
@@ -463,4 +466,4 @@ if st.session_state.angles_computed:
         plt.close()
 
 else:
-    st.info("👆 First, compute the QSVT angles using the button in Step 4 above.")
+    st.info("First compute the QSVT angles using the button in Step 4 above.")

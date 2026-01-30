@@ -8,20 +8,38 @@ from quantum import QSVT_circuit_2d, Advection_Gate_2d
 from solvers import cvx_poly_coef, Angles_Fixed
 
 st.set_page_config(page_title="QSVT PDE Solver - 2D", layout="wide")
-st.title("2D Diffusion-Advection: Quantum Singular Value Transformation")
+
+st.title("2D Advection-Diffusion via QSVT")
 
 st.markdown(r"""
-### Theory Snapshot (2D)
+**PDE:** $\partial_t u = \nu \nabla^2 u - \mathbf{c} \cdot \nabla u$ on periodic domain $[0,1)^2$
 
-$$\partial_t u = \nu (\partial_x^2 u + \partial_y^2 u) - c_x \partial_x u - c_y \partial_y u$$
-
-**Operator flow:**
-$$u_0 \;\xrightarrow{\text{Block-encode }A}\; \text{QSVT }P(A) \;\xrightarrow{\text{QFT advection}}\; u(t)$$
-
-- Grid: $n_x \times n_y$ with $n_x+n_y$ qubits
-- Diffusion: 5-point Laplacian via LCU block-encoding
-- Advection: phase shifts on $x$ and $y$ registers
+**Algorithm:** 5-point stencil Laplacian block-encoding with QSVT time evolution.
 """)
+
+with st.expander("**Theoretical Background**", expanded=False):
+    st.markdown(r"""
+    ### 2D Laplacian Discretization
+    
+    The 5-point stencil:
+    $$(\nabla^2 u)_{i,j} \approx \frac{u_{i+1,j} + u_{i-1,j} + u_{i,j+1} + u_{i,j-1} - 4u_{i,j}}{h^2}$$
+    
+    ### Qubit Encoding
+    
+    For an $N_x \times N_y$ grid:
+    - X-register: $n_x = \log_2 N_x$ qubits
+    - Y-register: $n_y = \log_2 N_y$ qubits
+    - Total data qubits: $n_x + n_y$
+    - Ancilla qubits: 3 (2 for LCU + 1 signal)
+    
+    ### Complexity
+    
+    | Component | Gate Count |
+    |-----------|------------|
+    | 2D Block encoding | $O(n_x + n_y)$ |
+    | QSVT ($d$ angles) | $O(d \cdot (n_x + n_y))$ |
+    | 2D QFT | $O(n_x^2 + n_y^2)$ |
+    """)
 
 if '2d_angles_computed' not in st.session_state:
     st.session_state['2d_angles_computed'] = False
@@ -30,7 +48,10 @@ if '2d_phi_sequences' not in st.session_state:
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("Quantum Hardware")
+    st.markdown("### Configuration")
+    st.markdown("---")
+    
+    st.markdown("**Qubits**")
     nx = st.slider("Grid Width (nx)", min_value=2, max_value=200, value=3, step=1)
     ny = st.slider("Grid Height (ny)", min_value=2, max_value=200, value=3, step=1)
     n_total = nx + ny
@@ -39,126 +60,82 @@ with st.sidebar:
     
     if n_total > max_qubits:
         st.error(f"Grid too large. Total qubits: {n_total} exceeds max {max_qubits}.")
-        st.info(f"Reduce grid sizes so nx + ny ≤ {max_qubits}. Example: nx=12, ny=12 (144 grid points, 2^24 state)")
         st.stop()
     
-    st.caption(f"Total qubits: {n_total} (x:{nx}, y:{ny}) → {nx*ny} grid points")
+    st.caption(f"{n_total} qubits, {nx}x{ny} = {nx*ny} grid points")
     if n_total > 18:
-        st.warning(f"Large grid: {n_total} qubits = 2^{n_total} = {2**n_total:,} state elements. Computation may be slow.")
-    st.header("Physics Parameters")
-    nu = st.slider("Viscosity (ν)", 0.005, 0.05, 0.02, step=0.001)
-    c_x = st.slider("X-Advection Velocity (cₓ)", -1.0, 1.0, 0.3, step=0.05)
-    c_y = st.slider("Y-Advection Velocity (cᵧ)", -1.0, 1.0, 0.3, step=0.05)
+        st.warning("Large grid - computation may be slow")
     
-    st.header("Time Evolution")
+    st.markdown("---")
+    st.markdown("**Physics Parameters**")
+    nu = st.slider("Viscosity (v)", 0.005, 0.05, 0.02, step=0.001)
+    c_x = st.slider("X-Velocity (cx)", -1.0, 1.0, 0.3, step=0.05)
+    c_y = st.slider("Y-Velocity (cy)", -1.0, 1.0, 0.3, step=0.05)
+    
+    st.markdown("---")
+    st.markdown("**Time Evolution**")
     col_t1, col_t2 = st.columns(2)
     with col_t1:
-        t_max = st.slider("Max Time Steps", 10, 60, 30, step=10)
+        t_max = st.slider("Max Steps", 10, 60, 30, step=10)
     with col_t2:
-        n_timesteps = st.slider("Number of Time Steps", 3, 10, 5, step=1)
+        n_timesteps = st.slider("Snapshots", 3, 10, 5, step=1)
     
     time_steps_display = [int(i * t_max / (n_timesteps - 1)) for i in range(n_timesteps)]
-    st.info(f"Visualizing {len(time_steps_display)} time steps: {time_steps_display}")
+    st.caption(f"{len(time_steps_display)} time snapshots")
 
 # --- MAIN CONTENT ---
+st.markdown("---")
 
-st.header("Step 1: The 2D Advection-Diffusion Equation")
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.markdown("""
-    We solve the 2D advection-diffusion PDE with periodic boundary conditions:
-    """)
-    st.latex(r"\frac{\partial u}{\partial t} = \nu \left(\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\right) - c_x \frac{\partial u}{\partial x} - c_y \frac{\partial u}{\partial y}")
-    st.markdown("""
-    Where:
-    - $u(x,y,t)$ is the wave amplitude at position $(x,y)$ and time $t$
-    - $\\nu$ is the **diffusion coefficient** (viscosity) - controls spreading
-    - $c_x, c_y$ are the **advection velocities** - control transport
-    - Domain: $(x,y) \\in [0, 1) \\times [0, 1)$ with periodic boundaries
-    - Uses **2D Laplacian** operator: $\\nabla^2 u = \\partial_x^2 u + \\partial_y^2 u$
-    """)
-
-with col2:
-    st.info(f"""
-    **Current Parameters:**
-    - ν = {nu}
-    - cₓ = {c_x}
-    - cᵧ = {c_y}
-    - Grid: {nx}×{ny} = {nx*ny} points
-    - dx = {1/nx:.4f}
-    - dy = {1/ny:.4f}
-    - dt ≈ {0.9*min(1/nx**2, 1/ny**2)/(4*nu):.5f}
-    """)
-
-st.header("Step 2: 2D Block-Encoded Laplacian")
-st.markdown("""
-The 2D diffusion operator uses a **5-point stencil** (center + 4 neighbors):
-""")
+# Step 1: Block Encoding
+st.markdown("### Step 1: 2D Block Encoding (5-Point Stencil)")
 
 col1, col2 = st.columns([1, 1])
 with col1:
-    st.markdown("""
+    st.markdown(r"""
+    **Stencil structure:**
     ```
-    Stencil:    [   0 ]
-                [   1 ]
-            [ 1 -4  1 ]
-                [   1 ]
-                [   0 ]
+           [ 1 ]
+       [ 1 -4  1 ]
+           [ 1 ]
     ```
     
-    - Center coefficient: **-4**
-    - Each neighbor: **+1**
-    - Encodes: $\\nabla^2 u = \\frac{u_{i+1,j} + u_{i-1,j} + u_{i,j+1} + u_{i,j-1} - 4u_{i,j}}{(dx)^2}$
+    Discrete Laplacian:
+    $$\nabla^2 u_{i,j} = \frac{u_{i+1,j} + u_{i-1,j} + u_{i,j+1} + u_{i,j-1} - 4u_{i,j}}{h^2}$$
     """)
 
 with col2:
     st.markdown(f"""
-    **Block Encoding Strategy:**
-    - Separate registers for x and y coordinates
-    - Shift gates on both axes independently
-    - Ancilla postselection projects onto Laplacian
-    
-    **Circuit Structure:**
-    - Total qubits: {n_total + 3} (x: {nx}, y: {ny}, ancilla: 2, signal: 1)
-    - Spatial resolution: {nx}×{ny}
+    **Circuit parameters:**
+    - X-register: {nx} qubits
+    - Y-register: {ny} qubits  
+    - Ancilla: 2 (LCU) + 1 (signal)
+    - Total: {n_total + 3} qubits
     """)
 
-st.header("Step 3: 2D QSVT Circuit")
-st.markdown("""
-**Quantum Singular Value Transformation** in 2D applies polynomial $P(\\nabla^2)$ to the Laplacian:
-""")
+st.markdown("### Step 2: QSVT Polynomial")
 
 col1, col2 = st.columns([1, 1])
 with col1:
     st.latex(r"P(\nabla^2) = e^{(\nabla^2-I) \cdot t} \approx \sum_{k=0}^d c_k T_k(\nabla^2)")
-    st.markdown("""
-    - Chebyshev polynomial approximation
-    - Degree $d$ increases with time step
+    st.markdown(r"""
+    - Chebyshev approximation of matrix exponential
+    - Degree $d \sim O(t/\epsilon)$
     - Requires $d+1$ rotation angles
     """)
 
 with col2:
     st.markdown(f"""
-    **2D Circuit Complexity:**
+    **Current configuration:**
     - Data qubits: {n_total}
-    - Ancilla qubits: 2
-    - Signal qubit: 1
-    - **Total: {n_total + 3} qubits**
-    
-    **Scaling:**
-    - 2×2 grid: 4 qubits ✓
-    - 3×3 grid: 6 qubits ✓
-    - 4×4 grid: 8 qubits ✓
-    - 5×5 grid: 10 qubits (deep)
+    - Total circuit qubits: {n_total + 3}
     """)
 
-st.header("Step 4: Compute QSVT Angles")
+st.markdown("### Step 3: Compute QSVT Angles")
 
-calc_angles_btn = st.button("⚙️ Calculate Angles for Selected Time Steps", type="primary")
+calc_angles_btn = st.button("Calculate Angles", type="primary")
 
 if calc_angles_btn:
-    with st.spinner("Computing 2D QSVT angles..."):
+    with st.spinner("Computing angles via CVXPY..."):
         st.session_state['2d_phi_sequences'] = {}
         progress_bar = st.progress(0)
         
@@ -176,45 +153,34 @@ if calc_angles_btn:
                 phi_seq = Angles_Fixed(coef)
                 st.session_state['2d_phi_sequences'][t] = phi_seq
             except Exception as e:
-                st.error(f"Failed to compute angles for t={t}: {e}")
+                st.error(f"Failed for t={t}: {e}")
             
             progress_bar.progress((idx + 1) / len(time_steps_display))
         
         st.session_state['2d_angles_computed'] = True
-        st.success(f"✓ Successfully computed angles for {len(st.session_state['2d_phi_sequences'])} time steps!")
+        st.success(f"Computed angles for {len(st.session_state['2d_phi_sequences'])} time steps")
 
 if st.session_state['2d_angles_computed']:
-    st.markdown("**Angle Sequence Information:**")
+    st.markdown("**Computed Angle Sequences:**")
     angle_data = []
     for t, phi in st.session_state['2d_phi_sequences'].items():
         angle_data.append({
             "Time Step": t,
-            "Polynomial Degree": len(phi) - 1,
-            "Num Angles": len(phi),
-            "First/Last Angle": f"[{phi[0]:.3f}, {phi[-1]:.3f}]"
+            "Degree": len(phi) - 1,
+            "Angles": len(phi),
+            "Range": f"[{phi[0]:.3f}, {phi[-1]:.3f}]"
         })
     st.dataframe(angle_data, use_container_width=True)
 
 if st.session_state['2d_angles_computed']:
-    st.header("Step 5: Choose Initial Condition and Simulate")
-    
-    # Display time-color legend
-    st.markdown("### Time Step Color Legend")
-    colors = plt.cm.viridis(np.linspace(0, 1, len(time_steps_display)))
-    legend_cols = st.columns(min(5, len(time_steps_display)))
-    for idx, (t, col) in enumerate(zip(time_steps_display, colors)):
-        with legend_cols[idx % len(legend_cols)]:
-            color_hex = '#{:02x}{:02x}{:02x}'.format(int(col[0]*255), int(col[1]*255), int(col[2]*255))
-            st.markdown(f"<span style='color:{color_hex}'>■</span> t = {t}", unsafe_allow_html=True)
-    
-    st.markdown("---")
+    st.markdown("### Step 4: Initial Condition and Simulation")
     
     col1, col2 = st.columns([1, 1])
     
     u0_func = None
     
     with col1:
-        ic_type = st.selectbox("2D Function Type", [
+        ic_type = st.selectbox("Initial Condition", [
             "Gaussian Peak",
             "Double Gaussian",
             "Gaussian Ring",
@@ -308,7 +274,7 @@ if st.session_state['2d_angles_computed']:
                     norm = np.linalg.norm(u0.flatten())
                     return u0 / norm if norm > 0 else u0
                 
-                st.success("✓ Valid function")
+                st.success("Valid function")
             except Exception as e:
                 st.error(f"Invalid function: {e}")
                 
@@ -596,8 +562,8 @@ if st.session_state['2d_angles_computed']:
         plot_placeholder.pyplot(fig)
         plt.close(fig)
         
-        status_text.markdown("**2D Simulation Complete!** 🎉")
+        status_text.markdown("**2D Simulation Complete**")
         progress_bar.progress(1.0)
 
 else:
-    st.info("👆 First, compute the QSVT angles using the button in Step 4 above.")
+    st.info("First compute the QSVT angles using the button in Step 4 above.")
