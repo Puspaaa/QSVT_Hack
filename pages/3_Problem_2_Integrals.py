@@ -180,19 +180,30 @@ with st.expander("**Method 2: Arithmetic Comparator Circuit**", expanded=False):
     ### Oracle Implementation
     
     This method implements the interval oracle $O_D$ using arithmetic comparison circuits.
-    The Boolean function $\chi_D(j)$ is realized via MCX gates that check $a \le j \le b$:
+    The Boolean function $\chi_D(j)$ is realized by checking $a \le j \le b$:
     
     $$|j\rangle|0\rangle_{\text{anc}} \xrightarrow{O_D} |j\rangle|\chi_D(j)\rangle_{\text{anc}}$$
+    
+    ### Two Implementation Approaches
+    
+    **Approach A: MCX per state** (current implementation)
+    - For each $j \in [a_{int}, b_{int}]$, apply MCX with control state = binary(j)
+    - Simple but scales as $O(M \cdot n)$ where $M$ = interval size
+    
+    **Approach B: IntegerComparator** (more efficient)
+    - Use Qiskit's `IntegerComparator` for $x \ge a$ and $x \le b$
+    - Combine results: `target = (x >= a) AND (x <= b)`
+    - Scales as $O(n)$ comparator circuits
     
     ### Circuit Flow
     
     ```
-    |0⟩^n   ──[H^⊗n]──[O_D comparator]──[U_f†]──[Measure]
-    |0⟩_anc ─────────────────┘
+    |0⟩^n   ──[H^⊗n]──[Comparator Oracle]──[U_f†]──[Measure]
+    |0⟩_anc ─────────────────────┘
     ```
     
     1. Create uniform superposition: $|+\rangle^{\otimes n} = \frac{1}{\sqrt{N}}\sum_j |j\rangle$
-    2. Apply oracle to mark states in interval
+    2. Apply oracle to mark states in interval (flip ancilla if $j \in [a,b]$)
     3. Apply inverse state preparation $U_f^\dagger$
     4. Measure and postselect on ancilla = 1
     
@@ -205,7 +216,8 @@ with st.expander("**Method 2: Arithmetic Comparator Circuit**", expanded=False):
     $$\Pr(\text{mark}=1) = \frac{|D|}{N}$$
     
     ### Complexity
-    - **Gate count:** $O(M \cdot n)$ where $M = |D|$ points in interval
+    - **MCX approach:** $O(M \cdot n)$ gates where $M = |D|$ points
+    - **IntegerComparator:** $O(n)$ gates (more efficient)
     - **Post-selection overhead:** $O(N/|D|) = O(1/(b-a))$ repetitions
     - **With amplitude amplification:** $O(\sqrt{N/|D|})$ — quadratic speedup
     - **Error:** 3-15% (depends on interval alignment and shot noise)
@@ -514,6 +526,114 @@ if run_button:
                 col2.metric("Quantum Estimate", f"{res['integral_est']:.5f}")
                 rel_err = abs(res['error']/res['integral_exact'])*100 if res['integral_exact'] != 0 else 0
                 col3.metric("Relative Error", f"{rel_err:.1f}%")
+                
+                st.markdown(f"""
+                **Algorithm Execution Details**
+                
+                | Step | Operation | Result |
+                |------|-----------|--------|
+                | 1 | Apply $H^{{\\otimes {n_qubits}}}$ | Uniform superposition over {2**n_qubits} states |
+                | 2 | Comparator marking | Mark {res['num_points']} states in {res['interval_int']} |
+                | 3 | Apply $U_f^\\dagger$ | Compute overlap with $|f\\rangle$ |
+                | 4 | Measure & post-select | Keep ancilla=1 results |
+                
+                **Measurement Statistics**
+                
+                | Quantity | Value | Meaning |
+                |----------|-------|---------|
+                | P(mark=1) | {res['post_select_rate']:.2%} | Post-selection rate |
+                | P(main=0, mark=1) | {res['p_zero_and_marked']:.4f} | Joint probability |
+                | $|\\langle\\chi_D|f\\rangle|$ | {res['overlap']:.4f} | Extracted overlap |
+                
+                **Circuit Complexity:** Depth = {res['depth']}, Gates = {res['gate_count']}, MCX = {res['num_points']}
+                """)
+                
+                # =============================================================
+                # STATE MARKING VISUALIZATION (inspired by Miro's notebook)
+                # =============================================================
+                st.markdown("---")
+                st.markdown("#### State Marking Visualization")
+                
+                with st.expander("**View Marked States and Amplitudes**", expanded=True):
+                    # Compute state amplitudes for visualization
+                    N_vis = 2**n_qubits
+                    x_grid_vis = np.linspace(0, 1, N_vis, endpoint=False)
+                    
+                    # Get function amplitudes
+                    if func_choice == "custom" and custom_func is not None:
+                        _, y_vals_vis = get_function_for_plot("custom", n_qubits, custom_func)
+                    else:
+                        _, y_vals_vis = get_function_for_plot(effective_func, n_qubits, None)
+                    
+                    # Normalize
+                    norm_val = np.linalg.norm(y_vals_vis)
+                    if norm_val > 0:
+                        amplitudes = y_vals_vis / norm_val
+                    else:
+                        amplitudes = y_vals_vis
+                    
+                    # Determine which states are in range
+                    a_int = int(np.floor(a_val * N_vis))
+                    b_int = min(int(np.floor(b_val * N_vis)), N_vis - 1)
+                    
+                    # Create visualization tabs
+                    viz_tab1, viz_tab2 = st.tabs(["Amplitude Bar Chart", "State Table"])
+                    
+                    with viz_tab1:
+                        st.markdown("**Quantum State Amplitudes with Marked Interval**")
+                        
+                        fig_amp, ax_amp = plt.subplots(figsize=(12, 4))
+                        
+                        # Color bars based on whether they're in the marked range
+                        colors = ['#2ecc71' if (a_int <= j <= b_int) else '#bdc3c7' for j in range(N_vis)]
+                        
+                        bars = ax_amp.bar(range(N_vis), amplitudes, color=colors, edgecolor='black', alpha=0.8)
+                        
+                        # Add interval boundaries
+                        ax_amp.axvline(x=a_int - 0.5, color='red', linestyle='--', linewidth=2, label=f'a = {a_val:.2f} → j={a_int}')
+                        ax_amp.axvline(x=b_int + 0.5, color='blue', linestyle='--', linewidth=2, label=f'b = {b_val:.2f} → j={b_int}')
+                        
+                        ax_amp.set_xlabel('Basis State Index |j⟩', fontsize=11)
+                        ax_amp.set_ylabel('Amplitude', fontsize=11)
+                        ax_amp.set_title(f'States in [{a_int}, {b_int}] are marked (green) by the comparator oracle', fontsize=11)
+                        ax_amp.legend(loc='upper right')
+                        ax_amp.grid(True, alpha=0.3, axis='y')
+                        
+                        if N_vis <= 32:
+                            ax_amp.set_xticks(range(N_vis))
+                        
+                        st.pyplot(fig_amp)
+                        plt.close()
+                        
+                        # Summary metrics
+                        marked_sum = np.sum(amplitudes[a_int:b_int+1])
+                        total_sum = np.sum(amplitudes)
+                        st.markdown(f"""
+                        **Marking Summary:**
+                        - **Marked states:** {b_int - a_int + 1} out of {N_vis} ({100*(b_int - a_int + 1)/N_vis:.1f}%)
+                        - **Sum of marked amplitudes:** {marked_sum:.4f}
+                        - **Fraction of total amplitude:** {marked_sum/total_sum:.4f}
+                        """)
+                    
+                    with viz_tab2:
+                        st.markdown("**Detailed State Information**")
+                        
+                        # Create table similar to Miro's output
+                        data_rows = []
+                        for j in range(N_vis):
+                            in_range = "Yes" if (a_int <= j <= b_int) else "No"
+                            bin_str = format(j, f'0{n_qubits}b')
+                            prob = amplitudes[j]**2
+                            data_rows.append({
+                                "Index |j⟩": j,
+                                "Binary": bin_str,
+                                "Position x": f"{x_grid_vis[j]:.4f}",
+                                "Amplitude": f"{amplitudes[j]:.4f}",
+                                "Probability": f"{prob:.4f}",
+                                "In [a,b]": in_range
+                            })
+                        
+                        st.dataframe(data_rows, use_container_width=True, height=300)
                 
                 st.markdown(f"""
                 **Algorithm Execution Details**
