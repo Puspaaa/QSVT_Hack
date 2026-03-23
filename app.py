@@ -36,8 +36,8 @@ SLIDES = [
     s06b_demo_1d_pde,
     s07b_demo_2d_pde,
     s07_qsvt_for_integration,
-    s08_our_approach,
     s08b_demo_integration,
+    s08_our_approach,
     s09_summary,
 ]
 
