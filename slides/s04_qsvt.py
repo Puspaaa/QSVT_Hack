@@ -1,5 +1,6 @@
 """Slide 4: QSVT — How it fixes the block-encoding problem."""
 
+import time
 import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
@@ -108,6 +109,103 @@ def _draw_qsvt_intuition():
     plt.close(fig)
 
 
+def _toy_channel_sums(depth, frame, sigma, phase_span):
+    """Toy phasor model for intuition (not an exact QSVT simulation).
+
+    Returns complex sums for signal/garbage in naive vs phase-steered setting
+    up to the selected frame index.
+    """
+    k = min(frame + 1, depth)
+    idx = np.arange(k)
+
+    # Garbage channel: naive phases stay roughly aligned; phase-steered alternates.
+    g_amp = (1.0 - sigma) * (0.86 ** idx)
+    g_naive_phase = 0.18 * idx
+    g_qsvt_phase = 0.18 * idx + ((-1) ** idx) * phase_span
+
+    g_naive = np.sum(g_amp * np.exp(1j * g_naive_phase))
+    g_qsvt = np.sum(g_amp * np.exp(1j * g_qsvt_phase))
+
+    # Signal channel: naive drifts more; phase-steered stays closer to aligned.
+    s_amp = sigma * (0.94 ** idx)
+    s_naive_phase = 0.28 * idx
+    s_qsvt_phase = 0.06 * idx
+
+    s_naive = np.sum(s_amp * np.exp(1j * s_naive_phase))
+    s_qsvt = np.sum(s_amp * np.exp(1j * s_qsvt_phase))
+
+    return (s_naive, s_qsvt, g_naive, g_qsvt), (s_amp, s_naive_phase, s_qsvt_phase, g_amp, g_naive_phase, g_qsvt_phase)
+
+
+def _draw_phasors(ax, amps, phases, title, color):
+    """Draw contribution phasors and their resultant on complex plane."""
+    vecs = amps * np.exp(1j * phases)
+    total = np.sum(vecs)
+
+    for z in vecs:
+        ax.arrow(0, 0, np.real(z), np.imag(z),
+                 head_width=0.03, head_length=0.05,
+                 length_includes_head=True, linewidth=1.1,
+                 color=color, alpha=0.25)
+
+    ax.arrow(0, 0, np.real(total), np.imag(total),
+             head_width=0.05, head_length=0.08,
+             length_includes_head=True, linewidth=2.2,
+             color=color, alpha=0.95)
+
+    lim = max(0.45, np.max(amps) * 2.0)
+    ax.axhline(0, color="#999", linewidth=0.7, alpha=0.5)
+    ax.axvline(0, color="#999", linewidth=0.7, alpha=0.5)
+    ax.set_xlim(-lim, lim)
+    ax.set_ylim(-lim, lim)
+    ax.set_aspect("equal")
+    ax.set_title(title, fontsize=11, fontweight="bold")
+    ax.grid(alpha=0.2)
+    ax.set_xlabel("Re")
+    ax.set_ylabel("Im")
+
+
+def _draw_phase_animation_frame(depth, frame, sigma, phase_span):
+    """Render one frame of the toy interference animation."""
+    sums, channels = _toy_channel_sums(depth, frame, sigma, phase_span)
+    s_naive, s_qsvt, g_naive, g_qsvt = sums
+    s_amp, s_naive_phase, s_qsvt_phase, g_amp, g_naive_phase, g_qsvt_phase = channels
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.8))
+
+    _draw_phasors(
+        axes[0],
+        g_amp,
+        g_naive_phase,
+        "Naive Garbage Phasors",
+        "#e67e22",
+    )
+    _draw_phasors(
+        axes[1],
+        g_amp,
+        g_qsvt_phase,
+        "Phase-Steered Garbage Phasors",
+        "#2e7d32",
+    )
+
+    labels = ["|S| naive", "|S| QSVT", "|G| naive", "|G| QSVT"]
+    vals = [np.abs(s_naive), np.abs(s_qsvt), np.abs(g_naive), np.abs(g_qsvt)]
+    cols = ["#4a90d9", "#7b61ff", "#e67e22", "#2e7d32"]
+    axes[2].bar(labels, vals, color=cols, alpha=0.85)
+    axes[2].set_title("Resultant Magnitudes", fontsize=11, fontweight="bold")
+    axes[2].set_ylabel("Magnitude")
+    axes[2].tick_params(axis="x", rotation=15)
+    axes[2].grid(axis="y", alpha=0.2)
+
+    fig.suptitle(
+        f"Toy Interference Frame {frame + 1}/{depth} (sigma={sigma:.2f})",
+        fontsize=12,
+        fontweight="bold",
+    )
+    fig.tight_layout()
+    return fig
+
+
 def render():
     slide_header("QSVT: The Grand Unification",
                  "One framework to rule (almost) all quantum algorithms")
@@ -126,6 +224,44 @@ The phases steer interference: keep signal, cancel garbage.
 
     # ── Visual comparison ──
     _draw_qsvt_intuition()
+
+    st.markdown("---")
+    st.markdown("### Animated Intuition: Phase Steering in Action")
+    st.caption(
+        "Toy model for intuition: each layer contributes a complex phasor to signal and garbage channels. "
+        "Naive phases align garbage; phase steering spreads garbage phases so they cancel."
+    )
+
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c1:
+        toy_depth = st.slider("Toy depth", 4, 24, 12, 1, key="s04_toy_depth")
+    with c2:
+        toy_sigma = st.slider("Singular value $\\sigma$", 0.55, 0.95, 0.80, 0.01, key="s04_toy_sigma")
+    with c3:
+        toy_span = st.slider("Phase span", 0.20, 1.60, 1.00, 0.05, key="s04_toy_span")
+
+    f_col, p_col = st.columns([2, 1])
+    with f_col:
+        frame = st.slider("Frame", 0, toy_depth - 1, toy_depth - 1, 1, key="s04_toy_frame")
+    with p_col:
+        play = st.button("Play", key="s04_toy_play", use_container_width=True)
+
+    ph = st.empty()
+    if play:
+        for fr in range(toy_depth):
+            fig_anim = _draw_phase_animation_frame(toy_depth, fr, toy_sigma, toy_span)
+            ph.pyplot(fig_anim, use_container_width=True)
+            plt.close(fig_anim)
+            time.sleep(0.08)
+    else:
+        fig_anim = _draw_phase_animation_frame(toy_depth, frame, toy_sigma, toy_span)
+        ph.pyplot(fig_anim, use_container_width=True)
+        plt.close(fig_anim)
+
+    st.info(
+        "Readout cue: compare |G| naive vs |G| QSVT in the right panel. "
+        "When phase steering works, garbage resultant shrinks while signal remains coherent."
+    )
 
     st.markdown("---")
 
