@@ -436,40 +436,6 @@ exact realisation of whatever polynomial we choose.
         the angles $\{\phi_j\}$ are found by **classical preprocessing**.
         """)
 
-    st.markdown(r"""
-### How The Phase Angles Are Actually Chosen
-
-The angles are **not guessed**. They come from a classical compilation pipeline:
-
-1. Choose the target spectral transform $f(\sigma)$ on $\sigma\in[-1,1]$.
-2. Build a bounded polynomial $P$ with the right parity and degree:
-    $|P(x)|\le 1$ on $[-1,1]$, and $P(-x)=\pm P(x)$.
-3. Usually design $P$ in a Chebyshev basis (or via Remez/minimax fitting)
-    so approximation error is near-optimal for a fixed degree.
-4. Convert $P$ to a QSP/QSVT phase list $\{\phi_0,\dots,\phi_d\}$ using
-    a stable classical synthesis routine (SU(2) factorization / Laurent-polynomial methods).
-5. Simulate the resulting transfer function and increase degree until
-    the final operator error is below the target $\epsilon$.
-
-So angle synthesis is a **deterministic compiler step**:
-target function $\rightarrow$ polynomial $\rightarrow$ phase sequence.
-""")
-
-    with st.expander("🔧 Practical Angle-Synthesis Workflow", expanded=False):
-        st.markdown(r"""
-Given a desired transform $f$, practitioners typically do:
-
-1. **Domain setup**: map singular values/eigenvalues into $[-1,1]$ via normalization.
-2. **Constraint setup**: enforce boundedness and parity required by QSVT.
-3. **Approximation**: compute a degree-$d$ polynomial with certified uniform error.
-4. **Phase extraction**: run a QSP phase-solver to get $\{\phi_j\}$.
-5. **Validation**: compare implemented response $P(\sigma)$ vs target $f(\sigma)$.
-6. **Refinement**: if needed, increase degree or tighten approximation region.
-
-Rule of thumb: harder targets (sharp features, large condition numbers) require
-larger degree $d$, which means more queries and more phase angles.
-""")
-
     c_left, c_right = st.columns([1.25, 1])
     with c_left:
         st.success(
