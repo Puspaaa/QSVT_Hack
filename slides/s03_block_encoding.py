@@ -253,28 +253,6 @@ so only three unitaries are needed. Here $S$ is cyclic shift:
 $S|j\rangle = |j+1 \bmod N\rangle$.
 """)
 
-    c_left, c_right = st.columns([1.25, 1])
-    with c_left:
-        st.success(
-            "**Implementation Checklist**\n"
-            "1. Pick decomposition $A = \\sum_i \\alpha_i U_i$\n"
-            "2. Compute normalization $s = \\sum_i |\\alpha_i|$\n"
-            "3. Build PREPARE over index register\n"
-            "4. Build SELECT to apply $U_i$ conditionally\n"
-            "5. Unprepare and postselect ancilla on $|0\\ldots0\\rangle$"
-        )
-    with c_right:
-        st.markdown(
-            """
-**Mental model**
-
-- PREPARE chooses a branch index $i$
-- SELECT applies the matching unitary $U_i$
-- UNPREPARE recombines branches coherently
-- Postselection reveals the top-left encoded block
-"""
-        )
-
     st.markdown("---")
 
     # ── The repeated-application problem ──
