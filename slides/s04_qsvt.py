@@ -109,148 +109,149 @@ def _draw_qsvt_intuition():
     plt.close(fig)
 
 
-def _step_update(state, sigma, beta, interleaved=False, phi=0.0):
-    """One toy update step for [signal, garbage] amplitudes.
-
-    If interleaved=True, apply D(phi)=diag(e^{i phi}, e^{-i phi})
-    on [signal, garbage] before U_A.
+def _evolve_state_2d(state, sigma, beta, apply_phase=False, phi=0.0):
+    """Apply U_A (optionally with phase gate) to [signal, garbage] state.
+    
+    Returns: (new_state, pre_postselection_state)
+    where pre_postselection_state is the full mixed state before measurement.
     """
     s_prev, g_prev = state
-    if interleaved:
+    
+    # Apply phase gate if interleaved
+    if apply_phase:
         s_in = np.exp(1j * phi) * s_prev
         g_in = np.exp(-1j * phi) * g_prev
     else:
         s_in, g_in = s_prev, g_prev
-
-    # Signal receives an A-path term plus a leak-back garbage term.
-    contrib_a_to_signal = sigma * s_in
-    contrib_g_to_signal = -beta * g_in
-
-    s_next = contrib_a_to_signal + contrib_g_to_signal
+    
+    # U_A mixes signal and garbage
+    s_next = sigma * s_in - beta * g_in
     g_next = beta * s_in + sigma * g_in
-    return np.array([s_next, g_next]), contrib_a_to_signal, contrib_g_to_signal
+    
+    # Post-selection: project back to |signal⟩ axis by extracting signal magnitude
+    # (in real protocol, this is conditional measurement; here it's just the signal part)
+    postsel_state = np.array([s_next, 0.0j])
+    
+    return np.array([s_next, g_next]), postsel_state
 
 
-def _simulate_histories(depth, sigma, phase_span):
-    """Simulate naive vs phase-interleaved repeated application histories."""
+def _simulate_trajectories_2d(depth, sigma, phase_span):
+    """Track full trajectories and post-selected measurements for both methods."""
     beta = np.sqrt(max(0.0, 1.0 - sigma**2))
-    n_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
-    p_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
-    n_contrib = []
-    p_contrib = []
-
-    # Smooth varying phase schedule to avoid trivial periodic lock-in.
+    
+    # Naive: repeated U_A only
+    n_full_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
+    n_postsel_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
+    
+    # Phase-interleaved: U_A with phase gates
+    p_full_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
+    p_postsel_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
+    
+    # Phase schedule
     if depth <= 1:
         phases = np.array([phase_span])
     else:
         t = np.linspace(0.0, 1.0, depth)
         phases = phase_span * np.cos(np.pi * t)
-
+    
     for idx in range(depth):
-        n_next, n_a, n_g = _step_update(n_states[-1], sigma, beta, interleaved=False)
-        p_next, p_a, p_g = _step_update(
-            p_states[-1],
-            sigma,
-            beta,
-            interleaved=True,
-            phi=phases[idx],
-        )
-        n_states.append(n_next)
-        p_states.append(p_next)
-        n_contrib.append((n_a, n_g))
-        p_contrib.append((p_a, p_g))
-
-    return np.array(n_states), np.array(p_states), n_contrib, p_contrib, phases
+        n_full, n_post = _evolve_state_2d(n_postsel_states[-1], sigma, beta, apply_phase=False)
+        p_full, p_post = _evolve_state_2d(p_postsel_states[-1], sigma, beta, apply_phase=True, phi=phases[idx])
+        
+        n_full_states.append(n_full)
+        n_postsel_states.append(n_post)
+        p_full_states.append(p_full)
+        p_postsel_states.append(p_post)
+    
+    return (np.array(n_full_states), np.array(n_postsel_states),
+            np.array(p_full_states), np.array(p_postsel_states),
+            phases)
 
 
-def _draw_application_frame(depth, frame, sigma, phase_span):
-    """Draw one frame of repeated U_A vs phase-interleaved applications."""
-    n_states, p_states, n_contrib, p_contrib, phases = _simulate_histories(depth, sigma, phase_span)
+def _draw_geometry_frame(depth, frame, sigma, phase_span):
+    """Draw 2D signal-garbage geometry showing trajectories and post-selection."""
+    n_full, n_post, p_full, p_post, phases = _simulate_trajectories_2d(depth, sigma, phase_span)
     k = min(frame + 1, depth)
-
-    fig, axes = plt.subplots(2, 2, figsize=(13, 8.5), gridspec_kw={"hspace": 0.32, "wspace": 0.25})
-
-    steps = np.arange(k + 1)
-    n_sig = np.abs(n_states[:k+1, 0])
-    n_gar = np.abs(n_states[:k+1, 1])
-    p_sig = np.abs(p_states[:k+1, 0])
-    p_gar = np.abs(p_states[:k+1, 1])
-
-    # --- Panel 1: naive magnitudes over applications ---
-    ax = axes[0, 0]
-    ax.plot(steps, n_sig, "-o", color="#4a90d9", linewidth=2, markersize=4, label="|signal|")
-    ax.plot(steps, n_gar, "-o", color="#e67e22", linewidth=2, markersize=4, label="|garbage|")
-    ax.set_title("Naive: Repeated $U_A$", fontweight="bold")
-    ax.set_xlabel("application step")
-    ax.set_ylabel("magnitude")
-    ax.grid(alpha=0.25)
-    ax.legend(fontsize=8)
-
-    # --- Panel 2: interleaved magnitudes over applications ---
-    ax = axes[0, 1]
-    ax.plot(steps, p_sig, "-o", color="#7b61ff", linewidth=2, markersize=4, label="|signal|")
-    ax.plot(steps, p_gar, "-o", color="#2e7d32", linewidth=2, markersize=4, label="|garbage|")
-    ax.set_title("Interleaved: $D(\\phi_j)U_A$", fontweight="bold")
-    ax.set_xlabel("application step")
-    ax.set_ylabel("magnitude")
-    ax.grid(alpha=0.25)
-    ax.legend(fontsize=8)
-
-    ymax = max(0.15, np.max(np.concatenate([n_sig, n_gar, p_sig, p_gar])) * 1.2)
-    for ax in [axes[0, 0], axes[0, 1]]:
-        ax.set_xlim(0, max(1, depth))
-        ax.set_ylim(0, ymax)
-
-    # Show current applied phase for the interleaved path at this frame.
-    axes[0, 1].text(
-        0.02,
-        0.95,
-        f"current $\\phi_j$ = {phases[k-1]:+.2f} rad",
-        transform=axes[0, 1].transAxes,
-        ha="left",
-        va="top",
-        fontsize=9,
-        bbox=dict(facecolor="white", alpha=0.75, edgecolor="#bbb"),
-    )
-
-    # --- Panel 3: contributions to signal at step k ---
-    n_a, n_g = n_contrib[k-1]
-    p_a, p_g = p_contrib[k-1]
-    ax = axes[1, 0]
-    x = np.arange(2)
-    width = 0.35
-    ax.bar(x - width/2, [abs(n_a), abs(p_a)], width, color="#4a90d9", alpha=0.85, label="A-path -> signal")
-    ax.bar(x + width/2, [abs(n_g), abs(p_g)], width, color="#e67e22", alpha=0.85, label="garbage leak-back -> signal")
-    ax.set_xticks(x)
-    ax.set_xticklabels(["naive", "interleaved"])
-    ax.set_ylabel("|contribution|")
-    ax.set_title(f"Step {k}: Signal-Update Contributions", fontweight="bold")
-    ax.legend(fontsize=8)
-    ax.grid(axis="y", alpha=0.2)
-
-    # Add signed annotations (to show cancellation direction)
-    ax.text(x[0] - width/2, abs(n_a) + 0.02, f"{np.real(n_a):+.2f}", ha="center", fontsize=8)
-    ax.text(x[0] + width/2, abs(n_g) + 0.02, f"{np.real(n_g):+.2f}", ha="center", fontsize=8)
-    ax.text(x[1] - width/2, abs(p_a) + 0.02, f"{np.real(p_a):+.2f}", ha="center", fontsize=8)
-    ax.text(x[1] + width/2, abs(p_g) + 0.02, f"{np.real(p_g):+.2f}", ha="center", fontsize=8)
-
-    # --- Panel 4: current signal/garbage magnitudes ---
-    ax = axes[1, 1]
-    labels = ["|signal| naive", "|signal| interleaved", "|garbage| naive", "|garbage| interleaved"]
-    vals = [abs(n_states[k, 0]), abs(p_states[k, 0]), abs(n_states[k, 1]), abs(p_states[k, 1])]
-    cols = ["#4a90d9", "#7b61ff", "#e67e22", "#2e7d32"]
-    ax.bar(labels, vals, color=cols, alpha=0.85)
-    ax.set_title("State Magnitudes After Step", fontweight="bold")
-    ax.set_ylabel("magnitude")
-    ax.tick_params(axis="x", rotation=15)
-    ax.grid(axis="y", alpha=0.2)
-
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6), gridspec_kw={"wspace": 0.3})
+    
+    for ax_idx, (ax, label, full, post, col_traj, col_arrow) in enumerate([
+        (axes[0], "Naive: repeated $U_A$", n_full, n_post, "#e67e22", "#ff6b35"),
+        (axes[1], "Interleaved: $D(\\phi_j)U_A$", p_full, p_post, "#2e7d32", "#1b5e20"),
+    ]):
+        # Draw axis labels and grid
+        ax.axhline(0, color="#999", linewidth=0.8, alpha=0.5)
+        ax.axvline(0, color="#999", linewidth=0.8, alpha=0.5)
+        ax.grid(True, alpha=0.2)
+        ax.set_aspect("equal")
+        
+        # Plot trajectory of full states (before post-selection)
+        ax.plot(np.real(full[:k+1, 0]), np.real(full[:k+1, 1]), 
+               "-", color=col_traj, linewidth=2.5, alpha=0.7, label="State trajectory", zorder=2)
+        
+        # Draw arrows for each step
+        for i in range(k):
+            if i < len(full) - 1:
+                x0, y0 = np.real(full[i, 0]), np.real(full[i, 1])
+                x1, y1 = np.real(full[i+1, 0]), np.real(full[i+1, 1])
+                dx, dy = x1 - x0, y1 - y0
+                ax.arrow(x0, y0, dx*0.8, dy*0.8, head_width=0.04, head_length=0.05,
+                        fc=col_arrow, ec=col_arrow, alpha=0.85, zorder=3)
+        
+        # Plot full state dots (blue filled for signal-rich, orange for garbage-mixed)
+        for i in range(k+1):
+            s_mag = np.abs(full[i, 0])
+            g_mag = np.abs(full[i, 1])
+            dot_color = plt.cm.RdYlBu(s_mag / (s_mag + g_mag + 0.01))
+            ax.plot(np.real(full[i, 0]), np.real(full[i, 1]), 'o', 
+                   color=dot_color, markersize=6, alpha=0.8, zorder=4, 
+                   markeredgecolor="black", markeredgewidth=0.5)
+        
+        # Post-selection points: project to x-axis (extract signal)
+        ax.plot(np.real(post[:k+1, 0]), np.real(post[:k+1, 1]), 
+               "X", color="#4a90d9", markersize=8, alpha=0.6, 
+               label="Post-selected signal", zorder=5, markeredgewidth=1.5, markeredgecolor="navy")
+        
+        # Dashed line from full state down to post-selected x-axis (showing projection)
+        for i in range(k+1):
+            ax.plot([np.real(full[i, 0]), np.real(post[i, 0])],
+                   [np.real(full[i, 1]), 0.0],
+                   "--", color="#ccc", linewidth=0.8, alpha=0.5, zorder=1)
+        
+        # Annotations
+        ax.set_xlabel("Signal amplitude", fontsize=11, fontweight="bold")
+        ax.set_ylabel("Garbage amplitude", fontsize=11, fontweight="bold")
+        ax.set_title(label, fontsize=12, fontweight="bold", pad=10)
+        ax.legend(fontsize=9, loc="upper left")
+        
+        # Set limits dynamically
+        all_vals = np.concatenate([np.real(full[:k+1, 0]), np.real(full[:k+1, 1]),
+                                   np.real(post[:k+1, 0])])
+        lim = max(0.2, np.max(np.abs(all_vals)) * 1.3)
+        ax.set_xlim(-0.1, lim)
+        ax.set_ylim(-0.1, lim)
+        
+        # Phase label for interleaved plot
+        if ax_idx == 1 and k > 0:
+            ax.text(0.98, 0.02, f"$\\phi_j$ = {phases[k-1]:+.2f} rad",
+                   transform=ax.transAxes, ha="right", va="bottom",
+                   fontsize=10, bbox=dict(boxstyle="round,pad=0.5", 
+                   facecolor="white", alpha=0.85, edgecolor="#bbb"))
+    
+    # Add magnitude comparison bar at bottom
+    fig.text(0.5, 0.08, 
+            f"Step {k}/{depth} | Signal (blue): naive={np.abs(n_full[k, 0]):.3f}, "
+            f"interleaved={np.abs(p_full[k, 0]):.3f} | "
+            f"Garbage (orange): naive={np.abs(n_full[k, 1]):.3f}, "
+            f"interleaved={np.abs(p_full[k, 1]):.3f}",
+            ha="center", fontsize=10, bbox=dict(boxstyle="round,pad=0.6",
+            facecolor="#f0f0f0", alpha=0.9, edgecolor="#999"))
+    
     fig.suptitle(
-        f"Repeated Applications up to Step {k}/{depth} (sigma={sigma:.2f}, phase span={phase_span:.2f})",
-        fontsize=12,
-        fontweight="bold",
+        f"QSVT Geometry: Post-Selection & Phase Steering (σ={sigma:.2f})",
+        fontsize=13, fontweight="bold", y=0.98
     )
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0.12, 1, 0.96])
     return fig
 
 
@@ -306,50 +307,64 @@ destructively interfere and cancel exactly — no contamination.
     )
 
     st.markdown("---")
-    st.markdown("### Animated Intuition: Phase Steering in Action")
+    st.markdown("### Animated Intuition: Post-Selection & Phase Steering")
     st.caption(
-        "Toy update model: start from [signal, garbage] = [1, 0], apply $U_A$ repeatedly, "
-        "and compare against interleaved updates $D(\\phi_j)U_A$ with varying phase angles."
+        "2D state-space visualization: X-axis is signal amplitude, Y-axis is garbage amplitude. "
+        "See how U_A mixes them, and how phase gates keep them separated."
     )
 
     c1, c2, c3 = st.columns([1, 1, 1])
     with c1:
-        toy_depth = st.slider("Applications", 2, 24, 12, 1, key="s04_toy_depth")
+        toy_depth = st.slider("Depth (# of U_A applications)", 2, 16, 8, 1, key="s04_toy_depth")
     with c2:
-        toy_sigma = st.slider("Singular value $\\sigma$", 0.55, 0.95, 0.80, 0.01, key="s04_toy_sigma")
+        toy_sigma = st.slider("Singular value σ", 0.55, 0.95, 0.75, 0.02, key="s04_toy_sigma")
     with c3:
-        toy_span = st.slider("Phase span", 0.10, 1.40, 0.90, 0.05, key="s04_toy_span")
+        toy_span = st.slider("Phase span", 0.20, 1.40, 0.80, 0.05, key="s04_toy_span")
 
     f_col, p_col = st.columns([2, 1])
     with f_col:
-        frame = st.slider("Frame", 0, toy_depth - 1, toy_depth - 1, 1, key="s04_toy_frame")
+        frame = st.slider("Current step", 0, toy_depth - 1, toy_depth - 1, 1, key="s04_toy_frame")
     with p_col:
-        play = st.button("Play", key="s04_toy_play", use_container_width=True)
+        play = st.button("Play ▶", key="s04_toy_play", use_container_width=True)
 
     ph = st.empty()
     if play:
         for fr in range(toy_depth):
-            fig_anim = _draw_application_frame(toy_depth, fr, toy_sigma, toy_span)
-            ph.pyplot(fig_anim, use_container_width=True)
-            plt.close(fig_anim)
-            time.sleep(0.08)
+            fig_geom = _draw_geometry_frame(toy_depth, fr, toy_sigma, toy_span)
+            ph.pyplot(fig_geom, use_container_width=True)
+            plt.close(fig_geom)
+            time.sleep(0.12)
     else:
-        fig_anim = _draw_application_frame(toy_depth, frame, toy_sigma, toy_span)
-        ph.pyplot(fig_anim, use_container_width=True)
-        plt.close(fig_anim)
+        fig_geom = _draw_geometry_frame(toy_depth, frame, toy_sigma, toy_span)
+        ph.pyplot(fig_geom, use_container_width=True)
+        plt.close(fig_geom)
 
-    with st.expander("How to read this animation", expanded=True):
-        st.markdown(
-            "- **Top-left**: naive repeated $U_A$ magnitudes over steps (signal vs garbage).\n"
-            "- **Top-right**: interleaved $D(\\phi_j)U_A$ magnitudes over steps; the label shows current phase.\n"
-            "- **Bottom-left**: for the current step, blue bar is A-path contribution to signal, orange bar is garbage leak-back contribution.\n"
-            "- **Bottom-right**: resulting |signal| and |garbage| after the current step for both methods.\n"
-            "- Desired pattern: interleaving reduces garbage while preserving signal."
-        )
+    with st.expander("📊 How to read this visualization", expanded=True):
+        st.markdown("""
+**Left panel (Naive):** Repeated $U_A$ only
+- Orange line traces the state through the signal–garbage plane.
+- Arrow heads show direction of evolution at each step.
+- Full colored dots: state *before* post-selection (mixed signal + garbage).
+- Blue X symbols: post-selected signal measured at each step (projected onto x-axis).
+- Dashed lines show projection from full state down to the x-axis.
+- **Problem:** garbage (y-coordinate) grows; each post-selection loses signal.
+
+**Right panel (Interleaved):** $U_A$ with phase gates $D(\\phi_j)$
+- Green line shows how phase steering *rotates* the state at each step.
+- The phase gates apply opposite rotations to signal and garbage: $D(\\phi) = \\mathrm{diag}(e^{i\\phi}, e^{-i\\phi})$.
+- This rotation keeps garbage from accumulating in the same direction.
+- **Benefit:** garbage stays small, post-selection recovers almost all signal each time.
+
+**Key insight:** Without phase gates, successive $U_A$ rotations push garbage further away. 
+With phase gates, the garbage oscillates and cancels; the signal stays mostly intact.
+        """)
 
     st.info(
-        "This is an intuition model: it isolates repeated-application mixing and shows how interleaved phases can suppress garbage leak-back."
+        "💡 **Intuition:** QSVT interleaves phase rotations to *redirect* where garbage goes, "
+        "so it doesn't accumulate. After post-selecting the signal each time, you pick up nearly "
+        "the full amplitude for the next step."
     )
+
 
     st.markdown("---")
 
