@@ -165,7 +165,39 @@ def _draw_phasors(ax, amps, phases, title, color):
     ax.set_ylabel("Im")
 
 
-def _draw_phase_animation_frame(depth, frame, sigma, phase_span):
+def _draw_cumulative_chain(ax, amps, phases, title, color):
+    """Draw tail-to-head cumulative phasor addition chain."""
+    vecs = amps * np.exp(1j * phases)
+    tail = 0 + 0j
+
+    for z in vecs:
+        head = tail + z
+        ax.arrow(np.real(tail), np.imag(tail),
+                 np.real(z), np.imag(z),
+                 head_width=0.03, head_length=0.05,
+                 length_includes_head=True, linewidth=1.4,
+                 color=color, alpha=0.45)
+        tail = head
+
+    # Resultant from origin for visual comparison
+    ax.arrow(0, 0, np.real(tail), np.imag(tail),
+             head_width=0.05, head_length=0.08,
+             length_includes_head=True, linewidth=2.2,
+             linestyle='--', color=color, alpha=0.95)
+
+    lim = max(0.45, np.max(amps) * 2.0)
+    ax.axhline(0, color="#999", linewidth=0.7, alpha=0.5)
+    ax.axvline(0, color="#999", linewidth=0.7, alpha=0.5)
+    ax.set_xlim(-lim, lim)
+    ax.set_ylim(-lim, lim)
+    ax.set_aspect("equal")
+    ax.set_title(title, fontsize=11, fontweight="bold")
+    ax.grid(alpha=0.2)
+    ax.set_xlabel("Re")
+    ax.set_ylabel("Im")
+
+
+def _draw_phase_animation_frame(depth, frame, sigma, phase_span, view_mode):
     """Render one frame of the toy interference animation."""
     sums, channels = _toy_channel_sums(depth, frame, sigma, phase_span)
     s_naive, s_qsvt, g_naive, g_qsvt = sums
@@ -173,20 +205,36 @@ def _draw_phase_animation_frame(depth, frame, sigma, phase_span):
 
     fig, axes = plt.subplots(1, 3, figsize=(13, 3.8))
 
-    _draw_phasors(
-        axes[0],
-        g_amp,
-        g_naive_phase,
-        "Naive Garbage Phasors",
-        "#e67e22",
-    )
-    _draw_phasors(
-        axes[1],
-        g_amp,
-        g_qsvt_phase,
-        "Phase-Steered Garbage Phasors",
-        "#2e7d32",
-    )
+    if view_mode == "Cumulative (tail-to-head)":
+        _draw_cumulative_chain(
+            axes[0],
+            g_amp,
+            g_naive_phase,
+            "Naive Garbage (Cumulative)",
+            "#e67e22",
+        )
+        _draw_cumulative_chain(
+            axes[1],
+            g_amp,
+            g_qsvt_phase,
+            "Phase-Steered Garbage (Cumulative)",
+            "#2e7d32",
+        )
+    else:
+        _draw_phasors(
+            axes[0],
+            g_amp,
+            g_naive_phase,
+            "Naive Garbage Phasors",
+            "#e67e22",
+        )
+        _draw_phasors(
+            axes[1],
+            g_amp,
+            g_qsvt_phase,
+            "Phase-Steered Garbage Phasors",
+            "#2e7d32",
+        )
 
     labels = ["|S| naive", "|S| QSVT", "|G| naive", "|G| QSVT"]
     vals = [np.abs(s_naive), np.abs(s_qsvt), np.abs(g_naive), np.abs(g_qsvt)]
@@ -232,13 +280,19 @@ The phases steer interference: keep signal, cancel garbage.
         "Naive phases align garbage; phase steering spreads garbage phases so they cancel."
     )
 
-    c1, c2, c3 = st.columns([1, 1, 1])
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1.2])
     with c1:
         toy_depth = st.slider("Toy depth", 4, 24, 12, 1, key="s04_toy_depth")
     with c2:
         toy_sigma = st.slider("Singular value $\\sigma$", 0.55, 0.95, 0.80, 0.01, key="s04_toy_sigma")
     with c3:
         toy_span = st.slider("Phase span", 0.20, 1.60, 1.00, 0.05, key="s04_toy_span")
+    with c4:
+        view_mode = st.selectbox(
+            "Vector view",
+            ["Resultant + contributions", "Cumulative (tail-to-head)"],
+            key="s04_toy_view_mode",
+        )
 
     f_col, p_col = st.columns([2, 1])
     with f_col:
@@ -249,12 +303,12 @@ The phases steer interference: keep signal, cancel garbage.
     ph = st.empty()
     if play:
         for fr in range(toy_depth):
-            fig_anim = _draw_phase_animation_frame(toy_depth, fr, toy_sigma, toy_span)
+            fig_anim = _draw_phase_animation_frame(toy_depth, fr, toy_sigma, toy_span, view_mode)
             ph.pyplot(fig_anim, use_container_width=True)
             plt.close(fig_anim)
             time.sleep(0.08)
     else:
-        fig_anim = _draw_phase_animation_frame(toy_depth, frame, toy_sigma, toy_span)
+        fig_anim = _draw_phase_animation_frame(toy_depth, frame, toy_sigma, toy_span, view_mode)
         ph.pyplot(fig_anim, use_container_width=True)
         plt.close(fig_anim)
 
