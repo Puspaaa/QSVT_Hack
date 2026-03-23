@@ -10,7 +10,7 @@ TITLE = "Our Implementation"
 
 def render():
     slide_header("Our Implementation",
-                 "Architecture, design decisions, and toolchain")
+                 "Architecture, tradeoffs, and final takeaways")
 
     # ── Architecture diagram ──
     st.markdown("### System Architecture")
@@ -71,29 +71,6 @@ def render():
     fig.tight_layout()
     st.pyplot(fig, use_container_width=True)
     plt.close(fig)
-
-    st.markdown("---")
-
-    st.markdown("### Paper Context: Where We Match vs Differ")
-    st.markdown(r"""
-| Aspect | Current App | Helle et al. (arXiv:2512.22163) |
-|---|---|---|
-| Operator strategy | Split-step: QSVT diffusion + QFT advection | Combined evolution via one QSVT target $e^{-M_1x^2+iM_2x}$ |
-| Finite-difference order | Mostly 2nd-order pedagogical baseline | 2/4/6/14 with strong high-order gains |
-| Block-encoding target | Laplacian-oriented diffusion block encoding | First-derivative-oriented encoding where $L=-cD+\nu D^2$ is polynomial in $D$ |
-| Polynomial construction | Numerical Chebyshev fitting + optimization | Analytic Jacobi-Anger/Bessel-based truncation bounds |
-| Error analysis | Qualitative decomposition | Rigorous $L^2$ bounds with explicit constants |
-| Parity handling | Single-parity constraints visible in demos | Non-parity extension using two-channel construction |
-""")
-
-    st.markdown("""
-**What is already aligned:** QSVT + LCU + QFT shifts, periodic BCs, 1D/2D demos, pyqsp-based angle workflows, and simulator-based validation.
-
-**Planned upgrade phases:**
-1. Context/pedagogy updates (now)
-2. Slide-level paper comparison and caveat transparency (now)
-3. Optional code-level migration toward high-order, paper-faithful PDE pipeline
-""")
 
     st.markdown("---")
 
@@ -163,6 +140,36 @@ def render():
         "rather than the entire solution vector. Postselection and polynomial-approximation "
         "quality are practical bottlenecks in these demos."
     )
+
+    st.markdown("---")
+
+    st.markdown("### Final Summary")
+    st.markdown(r"""
+**What this project demonstrates**
+
+- QSVT is a unifying primitive: once we can block-encode an operator, we can apply polynomial transforms to its spectrum.
+- PDE and integration tasks both fit this pattern: block encoding + polynomial design + phase synthesis + measurement.
+- The current implementation is a pedagogical, end-to-end simulator baseline with explicit caveats.
+
+**When quantum advantage is plausible**
+
+- Large-scale problems where $N=2^n$ is too large for direct classical state storage/manipulation.
+- Structured state preparation (not arbitrary $O(N)$ loading).
+- Observable-focused outputs (integrals/expectation values), not full tomography.
+- Controlled approximation and postselection overhead.
+
+**Current status**
+
+- 1D and 2D advection-diffusion demos are implemented.
+- Three integration methods are implemented, including parity-aware QSVT constructions.
+- Classical optimization + angle finding + circuit simulation + validation pipeline is working.
+
+**Natural next steps**
+
+- Higher-order finite-difference operators and tighter truncation/error controls.
+- Amplitude-estimation-based readout for better sampling scaling.
+- Resource estimation and error mitigation toward hardware relevance.
+""")
 
     key_concept(
         "Our implementation is a <b>complete, working pipeline</b>: "

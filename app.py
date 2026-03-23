@@ -23,7 +23,6 @@ from slides import (
     s07b_demo_2d_pde,
     s08_our_approach,
     s08b_demo_integration,
-    s09_summary,
 )
 
 SLIDES = [
@@ -38,7 +37,6 @@ SLIDES = [
     s07_qsvt_for_integration,
     s08b_demo_integration,
     s08_our_approach,
-    s09_summary,
 ]
 
 TOTAL = len(SLIDES)
