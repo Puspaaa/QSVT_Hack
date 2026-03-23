@@ -190,14 +190,11 @@ The normalisation factor $\alpha \geq \|A\|$ ensures the block $A/\alpha$ has
 operator norm $\leq 1$ so it can fit inside a unitary.
 
 Interpretation:
-- Data qubits carry the vector $|\psi\rangle$ we care about.
-- Ancilla qubits act as a success label.
-- Conditioning on ancilla $= |0\ldots 0\rangle$ exposes the desired block.
+- data register = payload $|\psi\rangle$
+- ancilla register = success/failure flag
+- project ancilla to $|0\ldots0\rangle$ to reveal encoded action
 
-**Recipe:**
-1. Prepare ancilla in $|0\rangle^{\otimes a}$
-2. Apply $U_A$ to ancilla + data register
-3. **Postselect** ancilla on $|0\rangle^{\otimes a}$
+**Three-step use:** prepare ancilla, apply $U_A$, postselect ancilla on $|0\rangle^{\otimes a}$.
 
 On success (probability $\|A|\psi\rangle\|^2 / \alpha^2$) the data register contains $A|\psi\rangle / \alpha$.
 """)
@@ -281,8 +278,8 @@ $S|j\rangle = |j+1 \bmod N\rangle$.
     st.markdown(r"""
 ### Stage 4: Why naive repetition still fails
 
-Suppose we want to apply a **polynomial** of $A$, e.g.\ $p(A) = A^k$ (time evolution).  
-A naive approach: just apply $U_A$ repeatedly $k$ times with postselection after each step.
+Suppose we want a polynomial in $A$ (for example $A^k$). A naive idea is to
+repeat $U_A$ and postselect each time.
 
 **The problem — data/garbage mixing:**
 
@@ -291,13 +288,12 @@ U_A\;|0\rangle|{\psi}\rangle \;=\; |0\rangle\,\frac{A}{\alpha}|\psi\rangle
 \;\;+\;\; |{\perp}\rangle\,|\text{garbage}\rangle
 $$
 
-After one application there is a garbage branch in ancilla-$|\perp\rangle$.
-When you apply $U_A$ again and project back to ancilla $|0\rangle$, the top-left
-block of $U_A^2$ is not only $(A/\alpha)^2$; it also contains a contamination term $BC$.
-So the projected signal is no longer a clean polynomial in $A$.
+After one application, amplitude leaks to ancilla-$|\perp\rangle$.
+After a second application plus projection, the signal block becomes
+$(A/\alpha)^2 + BC$, so contamination is mixed into the result.
 
-Each subsequent application makes the contamination worse.  Postselecting at the end gives
-the wrong answer, and the success probability falls **exponentially** as $(\|A\|/\alpha)^{2k}$.
+Repeated applications worsen contamination, and success probability decays roughly as
+$(\|A\|/\alpha)^{2k}$.
 """)
 
     # ── Visual: one application vs two ────────────────────────────────────

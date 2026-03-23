@@ -122,9 +122,8 @@ $$
 \xrightarrow{U_\chi^\dagger} U_\chi^\dagger|f\rangle
 $$
 
-A measurement of all zeros gives probability
-$P(\bar 0) = |\langle\chi_D|f\rangle|^2$, from which we extract the
-overlap and hence the integral.
+A measurement of all zeros gives
+$P(\bar 0) = |\langle\chi_D|f\rangle|^2$.
 
 **Pros:** $O(n)$ overhead, exact window state, no additional ancillas.
 **Cons:** Only works for intervals whose boxcar has a simple circuit
@@ -143,14 +142,12 @@ $$
 O_D |j\rangle|0\rangle = |j\rangle|j \in D\rangle
 $$
 
-The full circuit:
-
-1. Prepare uniform superposition $H^{\otimes n}|0\rangle$.
-2. Apply oracle $O_D$ to mark the interval.
-3. (Optional) Apply Grover amplitude amplification
-   iterations to boost the post-selection rate.
-4. Apply $U_f^\dagger$ (inverse state preparation).
-5. Measure main register $= \bar 0$ **and** target $= 1$.
+Circuit summary:
+1. Prepare uniform superposition.
+2. Mark interval with comparator oracle.
+3. Optional Grover boosts signal.
+4. Apply $U_f^\dagger$.
+5. Measure main register $= \bar 0$ and target $= 1$.
 
 The probability of that joint outcome encodes the overlap.
 
@@ -178,8 +175,7 @@ $$
 where $B(\lambda)$ is a smooth approximation to the step function
 on $[\cos(\pi b),\;\cos(\pi a)]$.
 
-Each component is implemented by a separate QSVT circuit with
-its own phase angles.  The final integral estimate is
+Implement one QSVT circuit per parity component and combine:
 $I \approx I_{\text{even}} + I_{\text{odd}}$.
 
 **Pros:** Works for *any* interval, no ancilla beyond QSVT signal qubit,

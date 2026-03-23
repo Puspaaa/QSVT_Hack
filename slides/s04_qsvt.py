@@ -116,12 +116,12 @@ def render():
     st.markdown(r"""
 ### Recall: the block-encoding problem
 
-We showed that naively multiplying $U_A \cdot U_A$ lets garbage cross-terms ($B \cdot C$) leak
-back into the signal subspace.  Every additional application makes this contamination **worse**.
+Naively multiplying $U_A$ causes garbage cross-terms ($B\cdot C$) to leak
+back into the signal block, and leakage compounds with depth.
 
-**QSVT's key insight:** instead of multiplying $U_A$ blindly, **interleave** each application  
+**QSVT insight:** instead of blindly repeating $U_A$, interleave each query
 with a phase rotation $e^{i\phi_j Z}$ on the ancilla qubit.
-These phases control relative signs between signal and garbage paths so interference can be engineered.
+The phases steer interference: keep signal, cancel garbage.
 """)
 
     # ── Visual comparison ──
@@ -135,9 +135,8 @@ These phases control relative signs between signal and garbage paths so interfer
 
 Consider the singular value decomposition $A/\alpha = \sum_i \sigma_i |u_i\rangle\langle v_i|$.
 
-After each $U_A$, the ancilla partially rotates between $|0\rangle$ (signal) and $|\perp\rangle$ (garbage)
-by an angle that depends on $\sigma_i$.  The phase gates $e^{i\phi_j Z}$ apply **different phases**
-to the $|0\rangle$ and $|\perp\rangle$ components, which controls the interference pattern.
+Each $U_A$ mixes ancilla signal $|0\rangle$ and garbage $|\perp\rangle$ by an amount that
+depends on $\sigma_i$. Phase gates then shift these branches differently.
 
 Concretely, on ancilla states:
 
@@ -146,8 +145,7 @@ e^{i\phi_j Z}|0\rangle = e^{i\phi_j}|0\rangle,\qquad
 e^{i\phi_j Z}|\perp\rangle = e^{-i\phi_j}|\perp\rangle
 $$
 
-So the same $U_A$ path can be made constructive in one branch and destructive in another
-depending on the chosen angle sequence.
+So one angle sequence can make signal branches constructive and garbage branches destructive.
 
 By choosing the $d+1$ angles $\{\phi_0, \dots, \phi_d\}$ correctly, the net effect after $d$
 applications of $U_A$ is:

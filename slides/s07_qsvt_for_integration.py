@@ -56,7 +56,7 @@ $$I \approx \langle D\,|\,u\rangle \;\cdot\; \frac{\sqrt{|D|}\;\|u\|}{N}$$
 
 **When:** Integration domain aligns with qubit structure ([0, 0.5], [0.25, 0.75], etc.)
 
-**Circuit:** Prepare $|D\rangle$ with $O(n)$ Hadamard gates, apply $U_f^\dagger$, measure probability of $|0^n\rangle$.
+**Circuit:** Prepare $|D\rangle$, apply $U_f^\dagger$, measure $|0^n\rangle$.
 
 $$P(0^n) = |\langle D | u \rangle|^2$$
 
@@ -74,7 +74,7 @@ $$P(0^n) = |\langle D | u \rangle|^2$$
 **Idea:** Build a quantum **range oracle** using integer comparators:
 - $O_D|j\rangle = (-1)^{[j \in D]}|j\rangle$ where $D = \{j : a \leq x_j \leq b\}$
 
-Uses Qiskit's `IntegerComparator` circuits (ripple-carry arithmetic).
+Uses Qiskit's `IntegerComparator` circuits.
 
 **Optional:** Apply **Grover amplitude amplification** to boost the overlap signal.
 
@@ -93,7 +93,7 @@ eigenvalue $\lambda = \cos(\pi x)$ of a block-encoded cosine operator.
 
 $$\mathbb{1}_{[a,b]}(x) \approx P_{\text{even}}(\lambda) + P_{\text{odd}}(\lambda)$$
 
-Two QSVT circuits (one for each parity component), combined to estimate the overlap.
+Run one QSVT circuit per parity component, then combine estimates.
 
 **Complexity:** $O(d \cdot n)$ where $d$ is the polynomial degree (controls precision of the boxcar).
 """)
