@@ -134,19 +134,24 @@ def _evolve_state_2d(state, theta, alpha, apply_phase=False, phi=0.0):
     # In-plane action: every query rotates by theta in the relevant plane.
     xy_rot = _rotate_2d(np.array([x, y]), theta)
 
+    # Tuned so interleaved path stays close to ideal, while naive drifts.
+    leak_strength = 0.14 * np.sin(alpha)
+
     if apply_phase:
         # Phase steering rotates the leakage axis in-plane.
         leak_axis = np.array([np.cos(phi), np.sin(phi)])
-        leak = np.sin(alpha) * np.dot(xy_rot, leak_axis)
-        # Existing garbage rotates/sign-flips under phase sequence, enabling cancellation.
-        z_next = 0.55 * z + leak * np.cos(phi)
+        leak = leak_strength * np.dot(xy_rot, leak_axis)
+        # Existing garbage is strongly damped under phase sequence, enabling cancellation.
+        z_next = 0.22 * z + leak * np.cos(phi)
     else:
         # No phase steering: leakage always points along the same in-plane axis.
-        leak = np.sin(alpha) * xy_rot[0]
-        z_next = 0.98 * z + leak
+        leak = leak_strength * xy_rot[0]
+        z_next = 0.95 * z + leak
 
     # More out-of-plane weight means worse projected in-plane quality.
-    scale = max(0.05, 1.0 - 0.35 * abs(z_next))
+    # Interleaved path should remain accurate; naive path drifts more under z growth.
+    proj_penalty = 0.03 if apply_phase else 0.20
+    scale = max(0.05, 1.0 - proj_penalty * abs(z_next))
     xy_next = scale * xy_rot
 
     return np.array([xy_next[0], xy_next[1], z_next])
@@ -179,70 +184,85 @@ def _simulate_trajectories_2d(depth, sigma, phase_span):
 
 
 def _draw_geometry_frame(depth, frame, sigma, phase_span):
-    """Draw projected in-plane trajectories with out-of-plane leakage diagnostics."""
+    """Draw 3D trajectories with out-of-plane leakage and projected-state error."""
     n_states, p_states, ideal_states, phases, theta, alpha = _simulate_trajectories_2d(depth, sigma, phase_span)
     k = min(frame + 1, depth)
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6), gridspec_kw={"wspace": 0.3})
+    fig = plt.figure(figsize=(14, 6))
+    gs = fig.add_gridspec(1, 2, wspace=0.25)
+    axes = [fig.add_subplot(gs[0, 0], projection="3d"), fig.add_subplot(gs[0, 1], projection="3d")]
 
     for ax_idx, (ax, label, states, col_traj, col_arrow) in enumerate([
         (axes[0], "Naive: repeated $U_A$", n_states, "#e67e22", "#ff6b35"),
         (axes[1], "Interleaved: $D(\\phi_j)U_A$", p_states, "#2e7d32", "#1b5e20"),
     ]):
-        ax.axhline(0, color="#999", linewidth=0.8, alpha=0.5)
-        ax.axvline(0, color="#999", linewidth=0.8, alpha=0.5)
-        ax.grid(True, alpha=0.2)
-        ax.set_aspect("equal")
-
-        # Unit circle shows the ideal in-plane manifold.
-        circle = plt.Circle((0, 0), 1.0, fill=False, linestyle="--", linewidth=1.0, color="#888", alpha=0.5)
-        ax.add_patch(circle)
+        ax.grid(True, alpha=0.25)
+        ax.view_init(elev=28, azim=-55)
 
         xy = states[:k+1, :2]
-        z_abs = np.abs(states[:k+1, 2])
+        z_vals = states[:k+1, 2]
+        z_abs = np.abs(z_vals)
         ideal_xy = ideal_states[:k+1, :2]
 
-        ax.plot(ideal_xy[:, 0], ideal_xy[:, 1], "--", color="#4a90d9", linewidth=2, alpha=0.8,
-                label="Ideal in-plane target")
-        ax.plot(xy[:, 0], xy[:, 1], "-", color=col_traj, linewidth=3, alpha=0.9,
-                label="Projected state after each step")
+        # Draw the relevant signal plane z=0 and ideal in-plane unit-circle trajectory.
+        plane_u = np.linspace(-1.05, 1.05, 20)
+        plane_v = np.linspace(-1.05, 1.05, 20)
+        uu, vv = np.meshgrid(plane_u, plane_v)
+        ax.plot_surface(uu, vv, np.zeros_like(uu), color="#dbeafe", alpha=0.15, linewidth=0)
+
+        t = np.linspace(0.0, 2.0 * np.pi, 160)
+        ax.plot(np.cos(t), np.sin(t), np.zeros_like(t), "--", color="#8aa1b1", linewidth=1.0, alpha=0.7)
+
+        ax.plot(ideal_xy[:, 0], ideal_xy[:, 1], np.zeros(k + 1), "--", color="#4a90d9", linewidth=2.2,
+                alpha=0.9, label="Ideal in-plane target")
+        ax.plot(xy[:, 0], xy[:, 1], z_vals, "-", color=col_traj, linewidth=3.0, alpha=0.95,
+                label="Actual 3D state")
 
         # Step markers are colored by out-of-plane leakage magnitude.
         z_norm = z_abs / (np.max(z_abs) + 1e-9)
         for i in range(k + 1):
             dot_color = plt.cm.YlOrRd(0.25 + 0.7 * z_norm[i])
-            ax.plot(xy[i, 0], xy[i, 1], "o", color=dot_color, markersize=7,
-                    alpha=0.9, zorder=4, markeredgecolor="black", markeredgewidth=0.5)
-            ax.text(xy[i, 0] + 0.03, xy[i, 1] + 0.03, str(i), fontsize=7, alpha=0.7)
-            ax.plot([ideal_xy[i, 0], xy[i, 0]], [ideal_xy[i, 1], xy[i, 1]],
+            ax.plot([xy[i, 0]], [xy[i, 1]], [z_vals[i]], "o", color=dot_color, markersize=6,
+                    alpha=0.95, markeredgecolor="black", markeredgewidth=0.4)
+            ax.text(xy[i, 0] + 0.02, xy[i, 1] + 0.02, z_vals[i] + 0.01, str(i), fontsize=7, alpha=0.75)
+
+            # Projection back to relevant plane.
+            ax.plot([xy[i, 0], xy[i, 0]], [xy[i, 1], xy[i, 1]], [z_vals[i], 0.0],
                     color=col_arrow, linewidth=1.0, alpha=0.35)
 
-        ax.plot(ideal_xy[k, 0], ideal_xy[k, 1], "*", color="#1f4db8", markersize=12,
+            # Error from ideal projected point at same step.
+            ax.plot([ideal_xy[i, 0], xy[i, 0]], [ideal_xy[i, 1], xy[i, 1]], [0.0, 0.0],
+                    color="#64748b", linewidth=1.0, alpha=0.35)
+
+        ax.plot([ideal_xy[k, 0]], [ideal_xy[k, 1]], [0.0], "*", color="#1f4db8", markersize=12,
                 label="Ideal final (in-plane)", zorder=5)
-        ax.plot(xy[k, 0], xy[k, 1], "X", color=col_traj, markersize=11,
-                markeredgecolor="black", markeredgewidth=1.0, zorder=6,
-                label="Projected final")
+        ax.plot([xy[k, 0]], [xy[k, 1]], [z_vals[k]], "X", color=col_traj, markersize=10,
+                markeredgecolor="black", markeredgewidth=1.0, label="Actual final")
+        ax.plot([xy[k, 0]], [xy[k, 1]], [0.0], "X", color=col_traj, markersize=9,
+                markeredgecolor="black", markeredgewidth=0.8, label="Projected final")
 
-        ax.set_xlabel("Relevant plane axis 1", fontsize=11, fontweight="bold")
-        ax.set_ylabel("Relevant plane axis 2", fontsize=11, fontweight="bold")
+        ax.set_xlabel("Plane axis 1", fontsize=10, fontweight="bold", labelpad=8)
+        ax.set_ylabel("Plane axis 2", fontsize=10, fontweight="bold", labelpad=8)
+        ax.set_zlabel("Out-of-plane z", fontsize=10, fontweight="bold", labelpad=5)
         ax.set_title(label, fontsize=12, fontweight="bold", pad=10)
-        ax.legend(fontsize=8, loc="lower left")
+        ax.legend(fontsize=8, loc="upper left")
 
-        ax.set_xlim(-1.15, 1.15)
-        ax.set_ylim(-1.15, 1.15)
+        ax.set_xlim(-1.10, 1.10)
+        ax.set_ylim(-1.10, 1.10)
+        ax.set_zlim(-0.45, 0.75)
 
         z_curr = abs(states[k, 2])
         err_curr = np.linalg.norm(states[k, :2] - ideal_states[k, :2])
-        ax.text(0.98, 0.98,
-                f"|z|={z_curr:.3f}\\nproj error={err_curr:.3f}",
-                transform=ax.transAxes, ha="right", va="top", fontsize=9,
-                bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.85, edgecolor="#bbb"))
+        ax.text2D(0.98, 0.98,
+              f"|z|={z_curr:.3f}\\nproj error={err_curr:.3f}",
+              transform=ax.transAxes, ha="right", va="top", fontsize=9,
+              bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.85, edgecolor="#bbb"))
 
         if ax_idx == 1 and k > 0:
-            ax.text(0.98, 0.02, f"$\\phi_j$ = {phases[k-1]:+.2f} rad",
-                   transform=ax.transAxes, ha="right", va="bottom",
-                   fontsize=10, bbox=dict(boxstyle="round,pad=0.5", 
-                   facecolor="white", alpha=0.85, edgecolor="#bbb"))
+                 ax.text2D(0.98, 0.02, f"$\\phi_j$ = {phases[k-1]:+.2f} rad",
+                     transform=ax.transAxes, ha="right", va="bottom",
+                     fontsize=10, bbox=dict(boxstyle="round,pad=0.5",
+                     facecolor="white", alpha=0.85, edgecolor="#bbb"))
 
     # Summary stats
     n_z_final = abs(n_states[k, 2])
@@ -259,10 +279,10 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
             facecolor="#f0f0f0", alpha=0.9, edgecolor="#999"), family="monospace")
 
     fig.suptitle(
-        f"QSVT Geometry: In-Plane Rotation (θ={theta:.2f}) + Out-of-Plane Leakage (α={alpha:.2f})",
+        f"QSVT Geometry in 3D: in-plane rotation θ={theta:.2f}, leakage angle α={alpha:.2f}",
         fontsize=13, fontweight="bold", y=0.98
     )
-    fig.tight_layout(rect=[0, 0.12, 1, 0.96])
+    fig.subplots_adjust(left=0.04, right=0.98, bottom=0.15, top=0.90, wspace=0.20)
     return fig
 
 
@@ -320,8 +340,8 @@ destructively interfere and cancel exactly — no contamination.
     st.markdown("---")
     st.markdown("### Animated Intuition: Post-Selection & Phase Steering")
     st.caption(
-        "State is modeled as (x, y, z): (x, y) is the relevant signal plane, z is out-of-plane garbage. "
-        "Each $U_A$ rotates by $\\theta$ in-plane and leaks by $\\alpha$ out-of-plane; measurement projects back to the plane."
+        "True 3D state-space view: (x, y) is the relevant signal plane, z is out-of-plane garbage. "
+        "Each $U_A$ rotates by $\\theta$ in-plane and leaks by $\\alpha$ out-of-plane; post-selection projects back to z=0."
     )
 
     c1, c2, c3 = st.columns([1, 1, 1])
@@ -354,17 +374,17 @@ destructively interfere and cancel exactly — no contamination.
         st.markdown("""
 **Key idea:** Repeated queries push amplitude out of the relevant plane; post-selection only keeps the in-plane projection.
 
-**Blue dashed path (both panels):** ideal trajectory if evolution stayed in-plane.
+**Blue dashed path (both panels):** ideal trajectory if evolution stayed in-plane (z=0).
 
 **Left panel (Naive):** repeated $U_A$ with no interleaved phases
-- The projected trajectory drifts away from the dashed ideal path.
-- $|z|$ grows because leakage always reinforces out-of-plane garbage.
-- Projection error increases, so the measured in-plane vector degrades.
+- The 3D path climbs away from the plane as z accumulates.
+- The projected trajectory drifts from the dashed ideal path.
+- Projection error increases because leakage reinforces in the same direction.
 
 **Right panel (Interleaved):** $D(\\phi_j)U_A$
-- Phase rotations change leakage direction each step.
-- Out-of-plane pieces interfere destructively, so $|z|$ stays smaller.
-- The projected trajectory remains closer to the ideal dashed path.
+- Phase rotations change leakage direction every step.
+- Out-of-plane pieces interfere destructively, so z stays small.
+- The projected final point stays close to the ideal target (high accuracy).
 
 **Bottom summary:**  
 $\\Delta|z| < 0$ and $\\Delta\\text{err} < 0$ mean phase steering is improving the projected final vector.
