@@ -120,8 +120,8 @@ We showed that naively multiplying $U_A \cdot U_A$ lets garbage cross-terms ($B 
 back into the signal subspace.  Every additional application makes this contamination **worse**.
 
 **QSVT's key insight:** instead of multiplying $U_A$ blindly, **interleave** each application  
-with a phase rotation $e^{i\phi_j Z}$ on the ancilla qubit.  These phases act as a "filter" that  
-keeps the computation in the clean signal subspace throughout the entire circuit.
+with a phase rotation $e^{i\phi_j Z}$ on the ancilla qubit.
+These phases control relative signs between signal and garbage paths so interference can be engineered.
 """)
 
     # ── Visual comparison ──
@@ -139,6 +139,16 @@ After each $U_A$, the ancilla partially rotates between $|0\rangle$ (signal) and
 by an angle that depends on $\sigma_i$.  The phase gates $e^{i\phi_j Z}$ apply **different phases**
 to the $|0\rangle$ and $|\perp\rangle$ components, which controls the interference pattern.
 
+Concretely, on ancilla states:
+
+$$
+e^{i\phi_j Z}|0\rangle = e^{i\phi_j}|0\rangle,\qquad
+e^{i\phi_j Z}|\perp\rangle = e^{-i\phi_j}|\perp\rangle
+$$
+
+So the same $U_A$ path can be made constructive in one branch and destructive in another
+depending on the chosen angle sequence.
+
 By choosing the $d+1$ angles $\{\phi_0, \dots, \phi_d\}$ correctly, the net effect after $d$
 applications of $U_A$ is:
 
@@ -147,6 +157,11 @@ $$\sigma_i \;\longmapsto\; P(\sigma_i)$$
 where $P$ is a **degree-$d$ polynomial** that we control.  The garbage terms
 destructively interfere and cancel exactly — no contamination.
 """)
+
+    st.caption(
+        "Mental model: QSVT is phase-engineered interference on ancilla-conditioned paths. "
+        "The polynomial is the resulting transfer function on singular values."
+    )
 
     st.markdown("---")
 
@@ -198,6 +213,10 @@ exact realisation of whatever polynomial we choose.
 | **Phase estimation** | Step function | $O(1/\epsilon)$ | Eigenvalues |
 | **Quantum walks** | $\sigma \mapsto e^{i\arccos\sigma}$ | $O(1)$ | Graph problems |
 """)
+
+    st.caption(
+        "Here $p$ is initial success probability, $\kappa$ is condition number, and $\epsilon$ is approximation error."
+    )
 
     key_concept(
         "QSVT transforms each singular value $\\sigma_i \\mapsto P(\\sigma_i)$ by interleaving "

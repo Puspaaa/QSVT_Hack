@@ -22,6 +22,13 @@ def render():
                  "Three methods: Compute-Uncompute, Arithmetic Comparator, "
                  "QSVT Parity")
 
+    with st.expander("Known limitations for this demo", expanded=True):
+        st.markdown(
+            "- QSVT parity mode can show larger error for near-symmetric intervals around 0.5.\n"
+            "- Comparator and QSVT methods rely on postselection; low success rates need more shots.\n"
+            "- Polynomial degree controls sharpness and stability; higher degree is not always better numerically."
+        )
+
     from measurements import (
         run_overlap_integral,
         run_qsvt_integral_arbitrary,
@@ -248,6 +255,12 @@ even-polynomial extraction has a known sign ambiguity.
                 key="dint_qsvt_ab",
             )
             interval_id = None
+            if abs((a_val + b_val) - 1.0) < 0.03:
+                st.warning(
+                    "This interval is close to symmetric around 0.5. "
+                    "Current parity extraction can show larger error for this case; "
+                    "try a slightly asymmetric interval or Method A/B for comparison."
+                )
 
     # ── Function preview ──────────────────────────────────────────────────
     N = 2 ** n_qubits
@@ -393,6 +406,10 @@ def _show_qsvt_results(res, n_qubits, a_val, b_val, func_choice):
         f"**Parity components:**  "
         f"$I_{{\\text{{even}}}}$ = {res['val_even']:.5f},  "
         f"$I_{{\\text{{odd}}}}$ = {res['val_odd']:.5f}"
+    )
+    st.caption(
+        "Known limitation: even-parity extraction is numerically less stable in this implementation, "
+        "especially for near-symmetric intervals."
     )
 
     # Boxcar polynomial visualisation

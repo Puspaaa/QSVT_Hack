@@ -156,17 +156,22 @@ def render():
     slide_header("Block Encoding & LCU",
                  "Embedding non-unitary matrices inside quantum circuits")
 
+    st.info(
+        "Before this slide: keep three roles separate. "
+        "Data register stores |psi>, ancilla qubits flag success/failure branches, "
+        "and postselection means we keep only shots where ancilla returns to |0...0>."
+    )
+
     # ── Motivation ──
     st.markdown(r"""
-### The Problem: non-unitary operations on a quantum computer
+### Stage 1: Why block encoding exists
 
-In physics we frequently need to apply a matrix $A$ (e.g.\ a Hamiltonian time-step,
-a finite-difference stencil, a Green's function) to a state.
-But quantum circuits can only apply **unitary** operators — they must preserve norm.
+In scientific computing we often need a matrix $A$ that is not directly unitary
+(time-step operators, stencils, damped transforms). Quantum hardware can only
+apply unitary circuits.
 
-If $A$ is not unitary (e.g.\ $\|A\| < 1$, or $A$ is not even square-normal),
-we **cannot** implement it directly as a gate.  
-**Block encoding** solves this by hiding $A$ inside a larger unitary.
+**Block encoding** solves this by embedding $A/\alpha$ into the top-left block
+of a larger unitary $U_A$ that acts on ancilla + data together.
 """)
 
     # ── Definition + Visual side by side ──
@@ -174,7 +179,7 @@ we **cannot** implement it directly as a gate.
 
     with col_def:
         st.markdown(r"""
-### Block Encoding Definition
+### Stage 2: Definition and ancilla meaning
 
 A unitary $U_A$ on $a + n$ qubits is an **$(\alpha,\, a)$-block encoding** of $A$ if
 
@@ -184,6 +189,11 @@ $$
 
 The normalisation factor $\alpha \geq \|A\|$ ensures the block $A/\alpha$ has
 operator norm $\leq 1$ so it can fit inside a unitary.
+
+Interpretation:
+- Data qubits carry the vector $|\psi\rangle$ we care about.
+- Ancilla qubits act as a success label.
+- Conditioning on ancilla $= |0\ldots 0\rangle$ exposes the desired block.
 
 **Recipe:**
 1. Prepare ancilla in $|0\rangle^{\otimes a}$
@@ -221,7 +231,7 @@ On success (probability $\|A|\psi\rangle\|^2 / \alpha^2$) the data register cont
 
     # ── The repeated-application problem ──
     st.markdown(r"""
-### Why a single block encoding is not enough
+### Stage 3: Why naive repetition fails
 
 Suppose we want to apply a **polynomial** of $A$, e.g.\ $p(A) = A^k$ (time evolution).  
 A naive approach: just apply $U_A$ repeatedly $k$ times with postselection after each step.
@@ -233,10 +243,10 @@ U_A\;|0\rangle|{\psi}\rangle \;=\; |0\rangle\,\frac{A}{\alpha}|\psi\rangle
 \;\;+\;\; |{\perp}\rangle\,|\text{garbage}\rangle
 $$
 
-After the first application the state has a **garbage component** in the ancilla-$|\perp\rangle$ subspace.
-Applying $U_A$ a second time mixes the clean signal with the garbage — the ancilla $|0\rangle$ subspace
-now contains contributions from **both** the desired $A^2|\psi\rangle$ piece **and** cross terms that
-couple back from the garbage.
+After one application there is a garbage branch in ancilla-$|\perp\rangle$.
+When you apply $U_A$ again and project back to ancilla $|0\rangle$, the top-left
+block of $U_A^2$ is not only $(A/\alpha)^2$; it also contains a contamination term $BC$.
+So the projected signal is no longer a clean polynomial in $A$.
 
 Each subsequent application makes the contamination worse.  Postselecting at the end gives
 the wrong answer, and the success probability falls **exponentially** as $(\|A\|/\alpha)^{2k}$.
@@ -246,11 +256,9 @@ the wrong answer, and the success probability falls **exponentially** as $(\|A\|
     _draw_mixing_diagram()
 
     st.info(
-        "**This is the core motivation for QSVT:**  "
-        "QSVT provides a way to apply an *arbitrary polynomial* $p(A)$ using "
-        "the block encoding, **without** ever letting the garbage leak back "
-        "into the signal subspace. It does so by interleaving $U_A$ with "
-        "carefully chosen phase rotations on the ancilla."
+        "**Bridge to next slide:** QSVT interleaves $U_A$ with ancilla phase rotations so "
+        "garbage paths destructively interfere while signal paths add coherently. "
+        "That gives a clean polynomial transform instead of contaminated block powers."
     )
 
     st.markdown("---")
@@ -266,6 +274,8 @@ Decompose $A = \sum_{i} \alpha_i\, U_i$ where each $U_i$ is easy to implement.  
 3. $U_A = \text{PREPARE}^\dagger \cdot \text{SELECT} \cdot \text{PREPARE}$ is an $(s, a)$-block encoding of $A$
 
 For our diffusion operator: $A_{\text{diff}} = a_0\, I + a_+\, S + a_-\, S^\dagger$ with just **2 ancilla qubits**.
+
+Here $S$ is the cyclic shift on the grid basis: $S|j\rangle = |j+1 \bmod N\rangle$.
 """)
 
     key_concept(

@@ -111,8 +111,10 @@ def Shift_gate_2d(nx, ny, axis=0, inverse=False):
 
 def Block_encoding_diffusion_2d(nx, ny, nu):
     """
-    2D Block Encoding for Laplacian operator.
-    Uses 4-neighbor stencil (5-point: center + 4 neighbors).
+    2D Block encoding used by the demo diffusion pipeline.
+    This implementation is a compact ancilla-limited approximation and
+    should be treated as experimental for pedagogy, not as a full optimal
+    5-point Laplacian LCU construction.
     Grid indexed as: flat_idx = x + y*nx where x in [0,nx), y in [0,ny)
     """
     ancilla = QuantumRegister(2, 'anc')
@@ -139,11 +141,11 @@ def Block_encoding_diffusion_2d(nx, ny, nu):
     S_y = Shift_gate_2d(nx, ny, axis=1).to_gate()
     S_y_dag = S_y.inverse()
     
-    # Apply shifts based on ancilla state (5 states from 2 ancilla is tricky)
+    # Apply shifts based on ancilla state (limited encoding with 2 ancilla qubits)
     # State |00⟩: Identity (do nothing)
     # State |01⟩: S_x (right)
     # State |10⟩: S_x† (left)
-    # State |11⟩: S_y (up) then S_y† (down) via sequential control
+    # State |11⟩: S_y (single y-shift branch in current demo circuit)
     
     qc.append(S_x.control(2, ctrl_state='01'), ancilla[:] + x_reg[:] + y_reg[:])
     qc.append(S_x_dag.control(2, ctrl_state='10'), ancilla[:] + x_reg[:] + y_reg[:])

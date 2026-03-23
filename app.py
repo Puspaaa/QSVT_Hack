@@ -67,6 +67,7 @@ def jump_to(idx):
 # ── Sidebar: slide outline ───────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### Presentation Outline")
+    st.caption("Suggested path: follow slides in order for first pass, then revisit demos.")
     for i, slide_mod in enumerate(SLIDES):
         label = f"{'→ ' if i == st.session_state.slide_idx else '   '}{i}. {slide_mod.TITLE}"
         if st.button(label, key=f"nav_{i}", use_container_width=True):
@@ -93,7 +94,8 @@ with nav_left:
 with nav_center:
     st.markdown(
         f"<p style='text-align:center; color:#888; margin-top:0.5rem;'>"
-        f"<b>{current_slide.TITLE}</b></p>",
+        f"<b>{current_slide.TITLE}</b><br>"
+        f"<span style='font-size:0.85rem;'>Recommended: keep sequence unless revisiting a demo</span></p>",
         unsafe_allow_html=True,
     )
 

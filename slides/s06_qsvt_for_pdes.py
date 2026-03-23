@@ -41,10 +41,10 @@ $$\frac{\partial u}{\partial t} = \nu \nabla^2 u \;-\; \mathbf{c} \cdot \nabla u
     with col2:
         st.markdown(r"""
         #### Step 2: Diffusion (QSVT)
-        $$e^{t\nu\nabla^2} \approx P(A_{\text{diff}})$$
+        $$\text{discrete diffusion step} \approx P(A_{\text{diff}})$$
         
         - Block-encode the discrete Laplacian via **LCU**
-        - Apply QSVT with even polynomial $P(x) = e^{t(|x|-1)}$
+        - Apply QSVT with an even Chebyshev target (implementation uses $e^{t(|x|-1)}$)
         - Uses 2 ancilla + 1 signal qubit
         """)
 
@@ -137,10 +137,17 @@ where $S$ is the QFT-based cyclic shift operator — only 3 terms!
 
     st.markdown("---")
 
+    st.warning(
+        "Error sources are distinct: (1) Lie-Trotter splitting error, "
+        "(2) spatial/time discretization choices, (3) polynomial approximation error, "
+        "and (4) postselection sampling noise."
+    )
+
     key_concept(
-        "Our PDE solver <b>splits</b> the problem: QSVT handles diffusion (matrix exponential), "
+        "Our PDE solver <b>splits</b> the problem: QSVT handles the discrete diffusion operator, "
         "QFT handles advection (diagonal in Fourier space). "
-        "Each time step uses $O(d \\cdot n)$ gates where $d = O(\\Delta t)$ and $n = \\log_2 N$."
+        "Each time step uses $O(d \\cdot n)$ block-encoding queries (plus QFT costs), "
+        "where $d$ is polynomial degree and $n = \\log_2 N$."
     )
 
     st.info("**Live Demo:** The 1D and 2D PDE demos are included in the upcoming slides.")

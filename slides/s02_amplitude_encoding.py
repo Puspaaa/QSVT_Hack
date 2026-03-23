@@ -32,13 +32,16 @@ where $|j\rangle$ are computational basis states of $n = \log_2 N$ qubits.
 | Classical | Quantum |
 |-----------|---------|
 | Store $N$ numbers → $O(N)$ memory | Store $N = 2^n$ amplitudes → $n$ qubits |
-| Read any entry → $O(1)$ | Full state not directly readable |
+| Read one entry directly → $O(1)$ | Estimate one probability from shots (statistical) |
+| Reconstruct full vector | Requires $O(N)$ reads | Requires many shots per basis state |
 | Matrix-vector product → $O(N^2)$ | Unitary application → $O(\text{poly}(n))$ |
 
 ### The Catch
 
 Preparing an arbitrary $|u\rangle$ can itself cost $O(N)$ gates.  
-But for **structured** data (e.g., PDE solutions with known physics), efficient preparation exists.
+In other words, we can compress storage exponentially, but we still pay for
+state preparation and readout. For **structured** data (e.g., PDE solutions
+with known physics), efficient preparation exists.
 """)
         reference("NC2000")
 

@@ -14,19 +14,19 @@ streamlit run app.py
 | Time | Demo | Key Takeaway |
 |------|------|--------------|
 | **0:00-0:30** | Landing Page | The challenge: exponential state space; the insight: QSVT polynomial transformations |
-| **0:30-2:00** | 1D PDE Solver | Watch quantum simulate advection-diffusion; compare to classical |
-| **2:00-4:30** | Problem 2: Integration | Three methods, arbitrary intervals, run comparison |
+| **0:30-2:00** | Foundations + 1D PDE Demo | Build intuition, then watch advection-diffusion vs classical |
+| **2:00-4:30** | Integration | Three methods with interval-dependent tradeoffs |
 | **4:30-5:00** | Q&A | Use "Technical Deep Dive" expanders for details |
 
 ## Project Structure
 
 ```
 QSVT_Hack/
-├── app.py                    # Landing page + QSVT overview
-├── pages/
-│   ├── 1_1D_Simulation.py    # 1D advection-diffusion solver
-│   ├── 2_2D_Simulation.py    # 2D extension
-│   └── 3_Problem_2_Integrals.py  # Quantum integration (3 methods)
+├── app.py                    # Slide navigator and presentation shell
+├── slides/                   # Full slide deck + demos
+│   ├── s00_title.py
+│   ├── ...
+│   └── s09_summary.py
 ├── quantum.py                # Quantum circuits (QSVT, block encoding)
 ├── measurements.py           # Integration measurement routines
 ├── simulation.py             # PDE simulation logic
@@ -55,7 +55,7 @@ Computes ∫_a^b f(x) dx using three methods:
 |--------|-----------|------------|-------|
 | **Compute-Uncompute** | Special (half-intervals) | O(n) | < 1% |
 | **Arithmetic/Comparison** | ANY [a, b] | O(M·n) | 3-15% |
-| **QSVT Parity** | ANY [a, b] | O(d·n) | 5-30% |
+| **QSVT Parity** | ANY [a, b] | O(d·n) | 5-30% (higher near symmetric intervals) |
 
 **Key insight:** Integration is an inner product → quantum overlap estimation!
 
@@ -96,4 +96,4 @@ For questions or feedback, please open an issue on GitHub.
 
 ---
 
-**Note**: This is a demonstration and educational tool. For production quantum PDE solving, additional optimization and error correction would be required.
+**Note**: This is a demonstration and educational tool. It emphasizes algorithmic correctness and intuition on a simulator. Practical advantage on hardware requires fault tolerance, robust state preparation, and observable-focused readout.

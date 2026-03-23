@@ -132,7 +132,8 @@ def render():
     st.warning(
         "**Caveat:** Full state readout negates the quantum advantage. "
         "The speedup applies when extracting *observables* (e.g., integrals, expectation values) "
-        "rather than the entire solution vector."
+        "rather than the entire solution vector. Postselection and polynomial-approximation "
+        "quality are practical bottlenecks in these demos."
     )
 
     key_concept(

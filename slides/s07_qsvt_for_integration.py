@@ -35,9 +35,17 @@ $$I \approx \langle D\,|\,u\rangle \;\cdot\; \frac{\sqrt{|D|}\;\|u\|}{N}$$
     # ── Three methods ──
     st.markdown("### Three Methods Implemented")
 
-    tab1, tab2, tab3 = st.tabs(["Method 1: Compute-Uncompute", "Method 2: Arithmetic", "Method 3: QSVT"])
+    method_stage = st.radio(
+        "Recommended learning sequence",
+        [
+            "1) Compute-Uncompute (baseline intuition)",
+            "2) Arithmetic comparator (general interval marking)",
+            "3) QSVT parity decomposition (polynomial approach)",
+        ],
+        key="s07_method_stage",
+    )
 
-    with tab1:
+    if method_stage.startswith("1)"):
         st.markdown(r"""
 #### Compute-Uncompute (Swap Test)
 
@@ -52,7 +60,7 @@ $$P(0^n) = |\langle D | u \rangle|^2$$
 **Limitation:** Only works for intervals that align with binary partitions.
 """)
 
-    with tab2:
+    elif method_stage.startswith("2)"):
         st.markdown(r"""
 #### Arithmetic Comparator
 
@@ -69,7 +77,7 @@ Uses Qiskit's `IntegerComparator` circuits (ripple-carry arithmetic).
 """)
         reference("Brassard2002")
 
-    with tab3:
+    else:
         st.markdown(r"""
 #### QSVT Parity Decomposition
 
@@ -84,7 +92,10 @@ Two QSVT circuits (one for each parity component), combined to estimate the over
 
 **Complexity:** $O(d \cdot n)$ where $d$ is the polynomial degree (controls precision of the boxcar).
 """)
-        reference("Gilyen2019")
+    st.caption(
+        "In practice, higher degree reduces transition width but can increase numerical sensitivity."
+    )
+    reference("Gilyen2019")
 
     st.markdown("---")
 
@@ -142,6 +153,16 @@ Two QSVT circuits (one for each parity component), combined to estimate the over
         fig.tight_layout()
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
+
+        edge_band = np.logical_or(
+            np.abs(x - a_val) < 0.05,
+            np.abs(x - b_val) < 0.05,
+        )
+        approx_err = float(np.mean(np.abs(box_approx[edge_band] - boxcar[edge_band])))
+        st.caption(
+            f"Boundary-region approximation error (heuristic): {approx_err:.3f}. "
+            "Sharp interval boundaries are the hardest part to approximate."
+        )
 
     st.markdown("---")
 

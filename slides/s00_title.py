@@ -57,7 +57,14 @@ def render():
 
     key_concept(
         "<b>Key promise:</b> Encode $N = 2^n$ grid points in just $n$ qubits, "
-        "then apply matrix functions in $O(\\text{poly}(n))$ gates — exponentially fewer resources."
+        "then apply matrix functions in $O(\\text{poly}(n))$ gates. "
+        "The strongest advantage appears when estimating <b>observables</b> (integrals, expectations), "
+        "not reconstructing the full state."
+    )
+
+    st.info(
+        "This app focuses on algorithmic correctness and intuition. "
+        "It is a simulator demo, not a fault-tolerant hardware benchmark."
     )
 
     st.markdown("<br>", unsafe_allow_html=True)

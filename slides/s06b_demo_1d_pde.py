@@ -47,6 +47,13 @@ def render():
     slide_header("Live Demo — 1D Advection-Diffusion",
                  "QSVT diffusion + QFT advection on a periodic domain")
 
+    with st.expander("Known limitations for this demo", expanded=True):
+        st.markdown(
+            "- Postselection keeps only a subset of shots; low success increases noise.\n"
+            "- Diffusion uses polynomial approximation of a discrete operator, not exact continuum evolution.\n"
+            "- Runtime/accuracy tradeoff depends on polynomial degree, shot count, and discretization choices."
+        )
+
     from simulation import exact_solution_fourier, get_classical_matrix
     from quantum import (QSVT_circuit_universal,
                          Block_encoding_diffusion, Advection_Gate)
@@ -89,6 +96,10 @@ def render():
         st.info(
             f"**One matrix application** $A|\\psi\\rangle$ advances the "
             f"solution by $\\Delta t = {dt:.6f}$ time units."
+        )
+        st.caption(
+            "Postselection note: only shots with signal=0 and ancilla=00 are kept. "
+            "Low valid-shot rates increase estimator variance."
         )
 
     with p2:
@@ -389,6 +400,10 @@ the solution has reached $T = m \cdot k \cdot \Delta t$.
          for j in range(1, m_runs + 1)]
     )
     st.caption(f"**Plan:** {snap_md}")
+    st.caption(
+        "Interpretation tip: each run returns one postselected endpoint state, "
+        "not all intermediate states inside the circuit."
+    )
 
     run_btn = st.button("Run 1-D Quantum Simulation", type="primary",
                         key="d1d_run")
@@ -509,6 +524,11 @@ the solution has reached $T = m \cdot k \cdot \Delta t$.
                     f"T = {phys_t:.4f} — "
                     f"{total_valid}/{shots} valid "
                     f"({100 * total_valid / shots:.1f} %)")
+                if total_valid / shots < 0.2:
+                    st.warning(
+                        "Low postselection success in this run (<20%). "
+                        "Increase shots for a more stable estimate."
+                    )
             else:
                 status.warning(
                     f"Run {j}: no valid post-selected counts.")

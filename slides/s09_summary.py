@@ -42,16 +42,20 @@ classical optimization problem — the quantum algorithm alone is not enough.
         st.markdown("""
 | Component | Status |
 |-----------|--------|
-| 1D advection-diffusion solver | Done |
-| 2D advection-diffusion solver | Done |
-| Quantum integration (3 methods) | Done |
-| LCU block encoding | Done |
-| QSVT circuit construction | Done |
-| Chebyshev polynomial optimization | Done |
-| Angle finding | Done |
-| 3-way validation (exact/classical/quantum) | Done |
-| Interactive visualization | Done |
+| 1D advection-diffusion solver | Implemented |
+| 2D advection-diffusion solver | Implemented (experimental) |
+| Quantum integration (3 methods) | Implemented (QSVT parity has caveats) |
+| LCU block encoding | Implemented |
+| QSVT circuit construction | Implemented |
+| Chebyshev polynomial optimization | Implemented |
+| Angle finding | Implemented |
+| 3-way validation (exact/classical/quantum) | Implemented |
+| Interactive visualization | Implemented |
 """)
+
+        st.caption(
+            "Known caveats are surfaced in demo slides (postselection overhead, parity-sensitive intervals, and approximation error sources)."
+        )
 
         st.markdown("### Future Directions")
         st.markdown("""

@@ -189,6 +189,10 @@ def render():
         r"Measurement collapses the state with probability "
         r"$p_j = |\langle j|\psi\rangle|^2$."
     )
+    st.caption(
+        "Interpretation: one measurement gives one bit. "
+        "Probabilities are learned from many repeated shots."
+    )
 
     # ── Precompute states ────────────────────────────────────────────────
     psi = np.array([1, 0], dtype=complex)
@@ -236,7 +240,7 @@ def render():
     lose_c = '#2ecc71' if col_to == 1 else '#e74c3c'
     col_psi = np.array([1, 0], dtype=complex) if col_to == 0 else np.array([0, 1], dtype=complex)
 
-    # Phase A — split: main vector fades, two ghost arrows grow to poles
+    # Phase A — visualizing probability weights before sampling collapse
     for f in range(MEAS_FRAMES + 1):
         t = f / MEAS_FRAMES
         arrows = [
@@ -245,7 +249,7 @@ def render():
             (np.pi,0.0, '#e74c3c', t * pr[1] * 1.4, 2.0),
         ]
         _frame(frame, 4, t * 0.5,
-               "Measurement — superposition splitting...", arrows, final)
+               "Measurement — probability weights before sampling", arrows, final)
         if f < MEAS_FRAMES:
             time.sleep(MEAS_DELAY)
     time.sleep(0.3)
