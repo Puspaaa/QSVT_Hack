@@ -1,6 +1,115 @@
 import numpy as np
+from math import factorial
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
 from qiskit.circuit.library import QFTGate, DiagonalGate
+
+
+# ==============================================================================
+# PAPER-ALIGNED FINITE-DIFFERENCE UTILITIES (arXiv:2512.22163)
+# ==============================================================================
+
+def fd_alpha_coefficients(order_2p):
+    """Return symmetric FD coefficients alpha_j for order 2p (j=1..p).
+
+    The coefficients implement the paper's first-derivative stencil:
+    D_{2p} = sum_{j=1}^p alpha_j * delta_{2j},
+    alpha_j = 2 (-1)^{j+1} (p!)^2 / ((p+j)! (p-j)!).
+    """
+    if order_2p <= 0 or order_2p % 2 != 0:
+        raise ValueError("order_2p must be a positive even integer")
+
+    p = order_2p // 2
+    pf = factorial(p)
+    coeffs = []
+    for j in range(1, p + 1):
+        num = 2.0 * ((-1) ** (j + 1)) * (pf ** 2)
+        den = factorial(p + j) * factorial(p - j)
+        coeffs.append(num / den)
+    return np.array(coeffs, dtype=float)
+
+
+def fd_c_p(order_2p):
+    """Return normalization constant c_p used in block-encoding scaling.
+
+    c_p^{-1} = sum_{j=1}^p |alpha_j| / j.
+    """
+    alpha = fd_alpha_coefficients(order_2p)
+    j = np.arange(1, len(alpha) + 1, dtype=float)
+    c_inv = np.sum(np.abs(alpha) / j)
+    return 1.0 / c_inv
+
+
+def high_order_fd_operator_1d(n_qubits, order_2p, domain_length=1.0, second_derivative=False):
+    """Build periodic 1D FD matrix for D_{2p} or D^{(2)}_{2p} on N=2^n grid.
+
+    Args:
+        n_qubits: number of spatial qubits (N=2^n grid points).
+        order_2p: even stencil order in {2,4,6,...}.
+        domain_length: physical domain length d.
+        second_derivative: if True, build D^{(2)}_{2p}; otherwise D_{2p}.
+    """
+    if n_qubits <= 0:
+        raise ValueError("n_qubits must be positive")
+
+    N = 2 ** n_qubits
+    dx = domain_length / N
+    alpha = fd_alpha_coefficients(order_2p)
+    I = np.eye(N, dtype=float)
+
+    op = np.zeros((N, N), dtype=float)
+    for j, a_j in enumerate(alpha, start=1):
+        if second_derivative:
+            op += (a_j / (j * dx) ** 2) * (np.roll(I, -j, axis=1) - 2.0 * I + np.roll(I, j, axis=1))
+        else:
+            op += (a_j / (2.0 * j * dx)) * (np.roll(I, -j, axis=1) - np.roll(I, j, axis=1))
+    return op
+
+
+def fd_symbols(k_modes, order_2p, N, domain_length=1.0):
+    """Compute Fourier symbols lambda_k and mu_k for D_{2p} and D^{(2)}_{2p}."""
+    if N <= 0:
+        raise ValueError("N must be positive")
+
+    k = np.asarray(k_modes, dtype=float)
+    dx = domain_length / N
+    omega = 2.0 * np.pi / domain_length
+    alpha = fd_alpha_coefficients(order_2p)
+
+    lambda_k = np.zeros_like(k, dtype=float)
+    mu_k = np.zeros_like(k, dtype=float)
+    for j, a_j in enumerate(alpha, start=1):
+        phase = omega * k * j * dx
+        lambda_k += a_j * np.sin(phase) / (j * dx)
+        mu_k += a_j * (2.0 - 2.0 * np.cos(phase)) / (j * dx) ** 2
+    return lambda_k, mu_k
+
+
+def fd_symbol_error_bounds(k_modes, order_2p, N, domain_length=1.0):
+    """Paper-style upper bounds for symbol approximation errors.
+
+    Bounds returned (for each k):
+    - |omega*k - lambda_k|
+    - |omega^2*k^2 - lambda_k^2|
+    - |omega^2*k^2 - mu_k|
+    """
+    k = np.asarray(k_modes, dtype=float)
+    p = order_2p // 2
+    dx = domain_length / N
+    omega = 2.0 * np.pi / domain_length
+    wk_abs = np.abs(omega * k)
+
+    c_p = (factorial(p) ** 2) / factorial(2 * p + 1)
+    c_p_prime = 2.0 * (factorial(p) ** 2) / factorial(2 * p + 2)
+
+    err_lambda = c_p * (wk_abs ** (2 * p + 1)) * (dx ** (2 * p))
+    err_lambda_sq = 2.0 * c_p * (wk_abs ** (2 * p + 2)) * (dx ** (2 * p))
+    err_mu = c_p_prime * (wk_abs ** (2 * p + 2)) * (dx ** (2 * p))
+
+    return {
+        "err_abs_wk_minus_lambda": err_lambda,
+        "err_abs_wk2_minus_lambda2": err_lambda_sq,
+        "err_abs_wk2_minus_mu": err_mu,
+    }
 
 class Shift_gate(QuantumCircuit):
     """Efficient cyclic shift using QFT."""

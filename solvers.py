@@ -1,7 +1,65 @@
 import numpy as np
 import cvxpy as cp
+from math import exp, log
 from numpy.polynomial.chebyshev import Chebyshev, chebpts1, chebfit, chebval
 from pyqsp import angle_sequence
+
+
+def paper_r_function(M, eps, max_iter=80):
+    """Solve for r in (M/r)^r = eps with r > M.
+
+    This helper mirrors Definition 5.1 in arXiv:2512.22163 and is used for
+    practical degree estimates in the Chebyshev truncation formulas.
+    """
+    if M <= 0:
+        raise ValueError("M must be positive")
+    if not (0 < eps < 1):
+        raise ValueError("eps must satisfy 0 < eps < 1")
+
+    # g(r) = r*log(M/r) - log(eps), root sought for r > M.
+    def g(r):
+        return r * (log(M) - log(r)) - log(eps)
+
+    lo = max(M * (1.0 + 1e-12), M + 1e-12)
+    hi = max(2.0 * M, M + 1.0)
+    while g(hi) > 0:
+        hi *= 2.0
+        if hi > 1e12:
+            break
+
+    for _ in range(max_iter):
+        mid = 0.5 * (lo + hi)
+        if g(mid) > 0:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def paper_chebyshev_truncation_orders(M1, M2, eps):
+    """Return (R1, R2, degree) using Proposition 5.5-style formulas.
+
+    The returned degree corresponds to the product structure used to approximate
+    exp(-M1 x^2 + i M2 x) in the paper.
+    """
+    if not (M1 >= 0 and M2 >= 0):
+        raise ValueError("M1 and M2 must be non-negative")
+    if not (0 < eps < 1):
+        raise ValueError("eps must satisfy 0 < eps < 1")
+
+    # If M1 or M2 is zero, keep the corresponding truncation minimal.
+    if M1 == 0:
+        R1 = 0
+    else:
+        R1 = int(np.floor(paper_r_function(exp(M1 / 4.0), 5.0 * eps / 12.0)))
+
+    if M2 == 0:
+        R2 = 0
+    else:
+        R2 = int(np.floor(0.5 * paper_r_function(exp(M2 / 2.0), 5.0 * eps / 8.0)))
+
+    degree = 2 * (R1 + R2)
+    return R1, R2, degree
 
 def robust_poly_coef(targ_f, interval, deg, epsil=1e-6, npts=2000):
     """Fit Chebyshev coefficients with a fast least-squares approach.
