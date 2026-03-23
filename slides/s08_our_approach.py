@@ -74,6 +74,29 @@ def render():
 
     st.markdown("---")
 
+    st.markdown("### Paper Context: Where We Match vs Differ")
+    st.markdown(r"""
+| Aspect | Current App | Helle et al. (arXiv:2512.22163) |
+|---|---|---|
+| Operator strategy | Split-step: QSVT diffusion + QFT advection | Combined evolution via one QSVT target $e^{-M_1x^2+iM_2x}$ |
+| Finite-difference order | Mostly 2nd-order pedagogical baseline | 2/4/6/14 with strong high-order gains |
+| Block-encoding target | Laplacian-oriented diffusion block encoding | First-derivative-oriented encoding where $L=-cD+\nu D^2$ is polynomial in $D$ |
+| Polynomial construction | Numerical Chebyshev fitting + optimization | Analytic Jacobi-Anger/Bessel-based truncation bounds |
+| Error analysis | Qualitative decomposition | Rigorous $L^2$ bounds with explicit constants |
+| Parity handling | Single-parity constraints visible in demos | Non-parity extension using two-channel construction |
+""")
+
+    st.markdown("""
+**What is already aligned:** QSVT + LCU + QFT shifts, periodic BCs, 1D/2D demos, pyqsp-based angle workflows, and simulator-based validation.
+
+**Planned upgrade phases:**
+1. Context/pedagogy updates (now)
+2. Slide-level paper comparison and caveat transparency (now)
+3. Optional code-level migration toward high-order, paper-faithful PDE pipeline
+""")
+
+    st.markdown("---")
+
     # ── Key design decisions ──
     st.markdown("### Key Design Decisions")
 

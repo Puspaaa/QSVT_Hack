@@ -152,6 +152,16 @@ But how do we **find** such a polynomial that approximates the function we want?
 
 QSVT requires that $P$ has **definite parity**: either $P(-x) = P(x)$ (even) or $P(-x) = -P(x)$ (odd).
 
+Why do these constraints appear at all?
+
+- **Boundedness ($|P(x)|\le 1$):** the QSVT circuit is unitary, and the implemented block is a sub-block of that unitary after projection.
+    So its singular values cannot exceed 1. If your target transform is larger than 1 on part of the spectrum,
+    you must rescale it and keep track of that scaling separately.
+
+- **Definite parity:** the alternating QSP/QSVT sequence built from $U_A$ and $U_A^\dagger$ with phase rotations has a built-in symmetry.
+    That symmetry makes a single sequence implement either an even or an odd polynomial channel.
+    A generic function is therefore split into even and odd parts and synthesized via two channels.
+
 This is not a serious limitation — any function can be split:
 
 $$

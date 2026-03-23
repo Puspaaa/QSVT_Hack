@@ -373,26 +373,6 @@ destructively interfere and cancel exactly — no contamination.
         ph.pyplot(fig_geom, use_container_width=True)
         plt.close(fig_geom)
 
-    with st.expander("📊 How to read this visualization", expanded=True):
-        st.markdown("""
-**Key idea:** Repeated queries push amplitude out of the relevant plane; post-selection only keeps the in-plane projection.
-
-**Blue dashed path (both panels):** ideal trajectory if evolution stayed in-plane (z=0).
-
-**Left panel (Naive):** repeated $U_A$ with no interleaved phases
-- The 3D path climbs away from the plane as z accumulates.
-- The projected trajectory drifts from the dashed ideal path.
-- Projection error increases because leakage reinforces in the same direction.
-
-**Right panel (Interleaved):** $D(\\phi_j)U_A$
-- Phase rotations change leakage direction every step.
-- Out-of-plane pieces interfere destructively, so z stays small.
-- The projected final point stays close to the ideal target (high accuracy).
-
-**Bottom summary:**  
-$\\Delta|z| < 0$ and $\\Delta\\text{err} < 0$ mean phase steering is improving the projected final vector.
-        """)
-
     st.info(
         "💡 **The QSVT insight:** Every query rotates the useful state in-plane but also leaks amplitude out-of-plane. "
         "Without phase steering, that leakage compounds and projection back to the plane gives the wrong vector. "

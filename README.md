@@ -47,6 +47,33 @@ Solves the 1D/2D advection-diffusion equation:
 2. **QSVT** applies the time evolution polynomial P(A) = e^{(A-I)t}
 3. **Measure** to extract the evolved state
 
+## Paper Context (arXiv:2512.22163)
+
+This project is now explicitly framed against:
+**Helle et al., "A quantum advection-diffusion solver using the quantum singular value transform"**.
+
+### Key Differences
+
+| Aspect | This App (current) | Paper |
+|---|---|---|
+| Operator strategy | Split-step: diffusion (QSVT) + advection (QFT) | Combined advection+diffusion in one QSVT call |
+| FD order | Pedagogical 2nd-order baseline | 2/4/6/14 high-order study |
+| Polynomial build | Numerical Chebyshev fitting/optimization | Analytic Jacobi-Anger/Bessel truncation bounds |
+| Error treatment | Qualitative decomposition | Rigorous theorem-level $L^2$ bounds |
+
+### What is Already Aligned
+
+- QSVT + LCU + QFT-shift architecture
+- Periodic boundary conditions
+- 1D/2D demos on Qiskit + Aer
+- Chebyshev/QSP angle workflow in practice
+
+### Upgrade Plan (Phased)
+
+1. Context and pedagogy updates
+2. Slide-level paper comparison and caveat transparency
+3. Optional code-level migration toward paper-faithful high-order pipeline
+
 ## Demo 2: Quantum Integration (Problem 2)
 
 Computes ∫_a^b f(x) dx using three methods:

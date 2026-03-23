@@ -24,6 +24,31 @@ $$\frac{\partial u}{\partial t} = \nu \nabla^2 u \;-\; \mathbf{c} \cdot \nabla u
 
     st.markdown("---")
 
+    st.markdown("### Context from Recent Research (Helle et al., arXiv:2512.22163)")
+    st.markdown(r"""
+Compared with the recent advection-diffusion QSVT paper, our current app is intentionally
+more pedagogical and uses a simpler baseline pipeline.
+
+**Main methodological difference:**
+
+- **This app:** Lie-Trotter split (diffusion via QSVT + advection via QFT), which introduces splitting error.
+- **Paper:** combined advection+diffusion in one QSVT target
+  $$f(x)=e^{-M_1 x^2 + iM_2 x},$$
+  so no splitting error from separate evolution operators.
+
+**Why this matters:** the paper reports that higher-order finite differences (2/4/6/14)
+can reduce required spatial qubits and gate counts for the same target accuracy,
+especially for smooth initial data.
+""")
+
+    st.info(
+        "Roadmap for this project: (1) pedagogical context updates, "
+        "(2) paper-comparison content in slides, (3) optional code-level upgrades "
+        "to high-order operators and paper-style polynomial construction."
+    )
+
+    st.markdown("---")
+
     # ── Operator Splitting ──
     st.markdown("### Operator Splitting Strategy")
 

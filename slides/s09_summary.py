@@ -68,6 +68,19 @@ classical optimization problem — the quantum algorithm alone is not enough.
 
     st.markdown("---")
 
+        st.markdown(r"""
+### Paper-Informed Context (arXiv:2512.22163)
+
+- Recent results show that **higher-order finite differences** can outperform low-order methods
+    at lower qubit/gate budgets when the problem is sufficiently smooth and well-resolved.
+- Our current app remains a pedagogical baseline with explicit caveats (splitting error,
+    postselection overhead, parity-sensitive cases), and now frames these tradeoffs transparently.
+- Near-term project plan is phased:
+    **(1)** context updates, **(2)** paper-comparison slide updates, **(3)** optional code-level migration.
+""")
+
+        st.markdown("---")
+
     # ── Full reference list ──
     st.markdown("### References")
     reference_list(list(REFERENCES.keys()))

@@ -13,7 +13,6 @@ inject_css()
 # ── Import all slide modules ─────────────────────────────────────────────────
 from slides import (
     s00_title,
-    s01_quantum_circuits,
     s02_amplitude_encoding,
     s03_block_encoding,
     s04_qsvt,
@@ -29,15 +28,14 @@ from slides import (
 
 SLIDES = [
     s00_title,
-    s01_quantum_circuits,
     s02_amplitude_encoding,
     s03_block_encoding,
     s04_qsvt,
     s05_hamiltonian_sim,
     s06_qsvt_for_pdes,
     s06b_demo_1d_pde,
-    s07_qsvt_for_integration,
     s07b_demo_2d_pde,
+    s07_qsvt_for_integration,
     s08_our_approach,
     s08b_demo_integration,
     s09_summary,
