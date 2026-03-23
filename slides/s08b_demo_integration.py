@@ -9,7 +9,6 @@ Enhanced layout:
 import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
-import pandas as pd
 from numpy.polynomial.chebyshev import chebval
 
 from slides.components import slide_header, key_concept
@@ -33,10 +32,7 @@ def render():
         run_overlap_integral,
         run_qsvt_integral_arbitrary,
         run_arithmetic_integral,
-        get_function_data,
-        get_boxcar_targets,
     )
-    from solvers import robust_poly_coef, Angles_Fixed
 
     # ══════════════════════════════════════════════════════════════════════
     #  Theory: Integration via inner products with a boxcar state
@@ -261,6 +257,12 @@ even-polynomial extraction has a known sign ambiguity.
                     "Current parity extraction can show larger error for this case; "
                     "try a slightly asymmetric interval or Method A/B for comparison."
                 )
+
+    st.info(
+        "How to interpret outputs: compare quantum estimate to exact value, "
+        "track relative error, and watch post-selection rate. "
+        "If post-selection is low, increase shots before concluding the method is inaccurate."
+    )
 
     # ── Function preview ──────────────────────────────────────────────────
     N = 2 ** n_qubits

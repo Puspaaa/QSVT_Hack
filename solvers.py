@@ -4,10 +4,12 @@ from numpy.polynomial.chebyshev import Chebyshev, chebpts1, chebfit, chebval
 from pyqsp import angle_sequence
 
 def robust_poly_coef(targ_f, interval, deg, epsil=1e-6, npts=2000):
-    """Robust Chebyshev polynomial fitting using stable least-squares method.
-    
-    This implementation uses NumPy's robust chebfit which handles normalization correctly.
-    Used for Problem 2 (Integral).
+    """Fit Chebyshev coefficients with a fast least-squares approach.
+
+    Recommended for interactive demos and integration tasks where numerical
+    robustness and speed are more important than strict boundedness guarantees.
+    This does not explicitly enforce $|P(x)| <= 1$; validate bounds separately
+    if required by QSP constraints.
     """
     a, b = interval
     
@@ -26,7 +28,12 @@ def robust_poly_coef(targ_f, interval, deg, epsil=1e-6, npts=2000):
     return coef_full
 
 def cvx_poly_coef(targ_f, interval, deg, epsil=1e-6, npts=2000):
-    """Original CVXPY-based solver for Problem 1 (Simulation)."""
+    """Solve constrained Chebyshev fitting with explicit QSP-style bounds.
+
+    Recommended for PDE/simulation paths where preserving the bounded
+    polynomial constraint is important. This method is slower than
+    ``robust_poly_coef`` but enforces ``|P(x)| <= 1 - epsil`` on sample points.
+    """
     a, b = interval
     
     # Generate Chebyshev points in [a, b]

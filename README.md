@@ -71,14 +71,7 @@ Computes ∫_a^b f(x) dx using three methods:
 - [Grand Unification of Quantum Algorithms (Martyn et al.)](https://arxiv.org/abs/2105.02859)
 - [QSVT Tutorial (Gilyen et al.)](https://arxiv.org/abs/1806.01838)
 
-## Installation
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-The application will open at `http://localhost:8501`.
+The application runs at `http://localhost:8501` after `streamlit run app.py`.
 
 ## License
 

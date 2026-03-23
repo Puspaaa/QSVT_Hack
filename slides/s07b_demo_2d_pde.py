@@ -19,6 +19,13 @@ def render():
     slide_header("Live Demo — 2D Advection-Diffusion",
                  "5-point stencil Laplacian + QFT advection on a periodic 2-D grid")
 
+    with st.expander("Experimental assumptions for this 2D demo", expanded=True):
+        st.markdown(
+            "- 2D diffusion block-encoding in this app is an educational approximation path.\n"
+            "- Results are most useful for trend comparison (exact vs classical vs quantum), not strict benchmarking.\n"
+            "- Postselection and shot noise can dominate when grid size or depth is high."
+        )
+
     from simulation import exact_solution_fourier_2d, get_classical_matrix_2d
     from quantum import QSVT_circuit_2d, Block_encoding_diffusion_2d, Advection_Gate_2d
     from solvers import cvx_poly_coef, Angles_Fixed

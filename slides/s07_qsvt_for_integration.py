@@ -34,6 +34,11 @@ $$I \approx \langle D\,|\,u\rangle \;\cdot\; \frac{\sqrt{|D|}\;\|u\|}{N}$$
 
     # ── Three methods ──
     st.markdown("### Three Methods Implemented")
+    st.info(
+        "Selection guide: use Method 1 for the cleanest baseline on aligned intervals, "
+        "Method 2 for arbitrary ranges with oracle logic, and Method 3 when you want a "
+        "QSVT-native polynomial approach."
+    )
 
     method_stage = st.radio(
         "Recommended learning sequence",

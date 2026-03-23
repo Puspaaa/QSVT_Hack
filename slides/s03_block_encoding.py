@@ -1,10 +1,9 @@
 """Slide 3: Block Encoding & LCU — the interface between classical matrices and quantum circuits."""
 
-import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
 from slides.components import (
-    slide_header, reference, key_concept, matrix_heatmap, reference_list,
+    slide_header, key_concept, reference_list,
 )
 
 TITLE = "Block Encoding & LCU"
