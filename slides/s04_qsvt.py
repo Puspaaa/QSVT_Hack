@@ -199,6 +199,27 @@ exact realisation of whatever polynomial we choose.
         the angles $\{\phi_j\}$ are found by **classical preprocessing**.
         """)
 
+    c_left, c_right = st.columns([1.25, 1])
+    with c_left:
+        st.success(
+            "**Angle-Design Checklist**\n"
+            "1. Pick target transform on singular values\n"
+            "2. Approximate with bounded polynomial $P$ on [-1, 1]\n"
+            "3. Enforce parity (even/odd or split into both)\n"
+            "4. Solve for phase angles $\\{\\phi_j\\}$ classically\n"
+            "5. Build phase-interleaved circuit and validate error"
+        )
+    with c_right:
+        st.markdown(
+            """
+**Mental model**
+
+- Polynomial design sets the transfer function
+- Angle synthesis compiles that transfer function
+- Circuit execution realizes it in $O(d)$ block-encoding queries
+"""
+        )
+
     st.markdown("---")
 
     # ── Grand unification table ──
