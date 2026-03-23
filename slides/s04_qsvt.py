@@ -153,7 +153,11 @@ def _draw_phasors(ax, amps, phases, title, color):
              length_includes_head=True, linewidth=2.2,
              color=color, alpha=0.95)
 
-    lim = max(0.45, np.max(amps) * 2.0)
+    lim = max(
+        0.45,
+        np.max(np.abs(vecs)) * 1.8,
+        np.abs(total) * 1.25,
+    )
     ax.axhline(0, color="#999", linewidth=0.7, alpha=0.5)
     ax.axvline(0, color="#999", linewidth=0.7, alpha=0.5)
     ax.set_xlim(-lim, lim)
@@ -169,6 +173,7 @@ def _draw_cumulative_chain(ax, amps, phases, title, color):
     """Draw tail-to-head cumulative phasor addition chain."""
     vecs = amps * np.exp(1j * phases)
     tail = 0 + 0j
+    points = [tail]
 
     for z in vecs:
         head = tail + z
@@ -178,6 +183,7 @@ def _draw_cumulative_chain(ax, amps, phases, title, color):
                  length_includes_head=True, linewidth=1.4,
                  color=color, alpha=0.45)
         tail = head
+        points.append(tail)
 
     # Resultant from origin for visual comparison
     ax.arrow(0, 0, np.real(tail), np.imag(tail),
@@ -185,7 +191,14 @@ def _draw_cumulative_chain(ax, amps, phases, title, color):
              length_includes_head=True, linewidth=2.2,
              linestyle='--', color=color, alpha=0.95)
 
-    lim = max(0.45, np.max(amps) * 2.0)
+    pts = np.array(points)
+    max_coord = np.max(np.abs(np.concatenate([np.real(pts), np.imag(pts)]))) if len(pts) else 0.0
+    lim = max(
+        0.45,
+        np.max(np.abs(vecs)) * 1.8,
+        np.abs(tail) * 1.25,
+        max_coord * 1.2,
+    )
     ax.axhline(0, color="#999", linewidth=0.7, alpha=0.5)
     ax.axvline(0, color="#999", linewidth=0.7, alpha=0.5)
     ax.set_xlim(-lim, lim)
@@ -273,11 +286,43 @@ The phases steer interference: keep signal, cancel garbage.
     # ── Visual comparison ──
     _draw_qsvt_intuition()
 
+    # ── How it works ──
+    st.markdown(r"""
+### How the phase rotations help
+
+Consider the singular value decomposition $A/\alpha = \sum_i \sigma_i |u_i\rangle\langle v_i|$.
+
+Each $U_A$ mixes ancilla signal $|0\rangle$ and garbage $|\perp\rangle$ by an amount that
+depends on $\sigma_i$. Phase gates then shift these branches differently.
+
+Concretely, on ancilla states:
+
+$$
+e^{i\phi_j Z}|0\rangle = e^{i\phi_j}|0\rangle,\qquad
+e^{i\phi_j Z}|\perp\rangle = e^{-i\phi_j}|\perp\rangle
+$$
+
+So one angle sequence can make signal branches constructive and garbage branches destructive.
+
+By choosing the $d+1$ angles $\{\phi_0, \dots, \phi_d\}$ correctly, the net effect after $d$
+applications of $U_A$ is:
+
+$$\sigma_i \;\longmapsto\; P(\sigma_i)$$
+
+where $P$ is a **degree-$d$ polynomial** that we control.  The garbage terms
+destructively interfere and cancel exactly — no contamination.
+""")
+
+    st.caption(
+        "Mental model: QSVT is phase-engineered interference on ancilla-conditioned paths. "
+        "The polynomial is the resulting transfer function on singular values."
+    )
+
     st.markdown("---")
     st.markdown("### Animated Intuition: Phase Steering in Action")
     st.caption(
-        "Toy model for intuition: each layer contributes a complex phasor to signal and garbage channels. "
-        "Naive phases align garbage; phase steering spreads garbage phases so they cancel."
+        "Toy model for intuition (not an exact QSVT simulator): each layer contributes a complex phasor. "
+        "Naive phases keep garbage more aligned; phase steering spreads garbage phases so they cancel."
     )
 
     c1, c2, c3, c4 = st.columns([1, 1, 1, 1.2])
@@ -312,43 +357,18 @@ The phases steer interference: keep signal, cancel garbage.
         ph.pyplot(fig_anim, use_container_width=True)
         plt.close(fig_anim)
 
+    with st.expander("How to read this animation", expanded=True):
+        st.markdown(
+            "- **Left panel**: garbage-channel phasors for naive repeated application.\n"
+            "- **Middle panel**: garbage-channel phasors with phase steering.\n"
+            "- **Right bars**: resultant magnitudes for signal and garbage in naive vs steered settings.\n"
+            "- In **Resultant + contributions** view: faint arrows are per-layer contributions, bold arrow is their sum.\n"
+            "- In **Cumulative** view: arrows are added tail-to-head so cancellation is visible geometrically.\n"
+            "- Goal pattern: $|G|$ shrinks under steering while $|S|$ remains large."
+        )
+
     st.info(
-        "Readout cue: compare |G| naive vs |G| QSVT in the right panel. "
-        "When phase steering works, garbage resultant shrinks while signal remains coherent."
-    )
-
-    st.markdown("---")
-
-    # ── How it works ──
-    st.markdown(r"""
-### How the phase rotations help
-
-Consider the singular value decomposition $A/\alpha = \sum_i \sigma_i |u_i\rangle\langle v_i|$.
-
-Each $U_A$ mixes ancilla signal $|0\rangle$ and garbage $|\perp\rangle$ by an amount that
-depends on $\sigma_i$. Phase gates then shift these branches differently.
-
-Concretely, on ancilla states:
-
-$$
-e^{i\phi_j Z}|0\rangle = e^{i\phi_j}|0\rangle,\qquad
-e^{i\phi_j Z}|\perp\rangle = e^{-i\phi_j}|\perp\rangle
-$$
-
-So one angle sequence can make signal branches constructive and garbage branches destructive.
-
-By choosing the $d+1$ angles $\{\phi_0, \dots, \phi_d\}$ correctly, the net effect after $d$
-applications of $U_A$ is:
-
-$$\sigma_i \;\longmapsto\; P(\sigma_i)$$
-
-where $P$ is a **degree-$d$ polynomial** that we control.  The garbage terms
-destructively interfere and cancel exactly — no contamination.
-""")
-
-    st.caption(
-        "Mental model: QSVT is phase-engineered interference on ancilla-conditioned paths. "
-        "The polynomial is the resulting transfer function on singular values."
+        "Practical cue: increase phase span and depth to see stronger garbage cancellation in this toy model."
     )
 
     st.markdown("---")
