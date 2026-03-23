@@ -109,15 +109,16 @@ def _draw_qsvt_intuition():
     plt.close(fig)
 
 
-def _step_update(state, sigma, beta, interleaved=False):
+def _step_update(state, sigma, beta, interleaved=False, phi=0.0):
     """One toy update step for [signal, garbage] amplitudes.
 
-    If interleaved=True, apply a phase rotation equivalent to D=diag(1,-1)
-    on [signal, garbage] before U_A (global phase ignored).
+    If interleaved=True, apply D(phi)=diag(e^{i phi}, e^{-i phi})
+    on [signal, garbage] before U_A.
     """
     s_prev, g_prev = state
     if interleaved:
-        s_in, g_in = s_prev, -g_prev
+        s_in = np.exp(1j * phi) * s_prev
+        g_in = np.exp(-1j * phi) * g_prev
     else:
         s_in, g_in = s_prev, g_prev
 
@@ -130,56 +131,87 @@ def _step_update(state, sigma, beta, interleaved=False):
     return np.array([s_next, g_next]), contrib_a_to_signal, contrib_g_to_signal
 
 
-def _simulate_histories(depth, sigma):
+def _simulate_histories(depth, sigma, phase_span):
     """Simulate naive vs phase-interleaved repeated application histories."""
     beta = np.sqrt(max(0.0, 1.0 - sigma**2))
-    n_states = [np.array([1.0, 0.0])]
-    p_states = [np.array([1.0, 0.0])]
+    n_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
+    p_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
     n_contrib = []
     p_contrib = []
 
-    for _ in range(depth):
+    # Smooth varying phase schedule to avoid trivial periodic lock-in.
+    if depth <= 1:
+        phases = np.array([phase_span])
+    else:
+        t = np.linspace(0.0, 1.0, depth)
+        phases = phase_span * np.cos(np.pi * t)
+
+    for idx in range(depth):
         n_next, n_a, n_g = _step_update(n_states[-1], sigma, beta, interleaved=False)
-        p_next, p_a, p_g = _step_update(p_states[-1], sigma, beta, interleaved=True)
+        p_next, p_a, p_g = _step_update(
+            p_states[-1],
+            sigma,
+            beta,
+            interleaved=True,
+            phi=phases[idx],
+        )
         n_states.append(n_next)
         p_states.append(p_next)
         n_contrib.append((n_a, n_g))
         p_contrib.append((p_a, p_g))
 
-    return np.array(n_states), np.array(p_states), n_contrib, p_contrib
+    return np.array(n_states), np.array(p_states), n_contrib, p_contrib, phases
 
 
-def _draw_application_frame(depth, frame, sigma):
+def _draw_application_frame(depth, frame, sigma, phase_span):
     """Draw one frame of repeated U_A vs phase-interleaved applications."""
-    n_states, p_states, n_contrib, p_contrib = _simulate_histories(depth, sigma)
+    n_states, p_states, n_contrib, p_contrib, phases = _simulate_histories(depth, sigma, phase_span)
     k = min(frame + 1, depth)
 
     fig, axes = plt.subplots(2, 2, figsize=(13, 8.5), gridspec_kw={"hspace": 0.32, "wspace": 0.25})
 
-    # --- Panel 1: naive trajectory in (signal, garbage) plane ---
+    steps = np.arange(k + 1)
+    n_sig = np.abs(n_states[:k+1, 0])
+    n_gar = np.abs(n_states[:k+1, 1])
+    p_sig = np.abs(p_states[:k+1, 0])
+    p_gar = np.abs(p_states[:k+1, 1])
+
+    # --- Panel 1: naive magnitudes over applications ---
     ax = axes[0, 0]
-    ax.plot(n_states[:k+1, 0], n_states[:k+1, 1], "-o", color="#e67e22", linewidth=2, markersize=4)
+    ax.plot(steps, n_sig, "-o", color="#4a90d9", linewidth=2, markersize=4, label="|signal|")
+    ax.plot(steps, n_gar, "-o", color="#e67e22", linewidth=2, markersize=4, label="|garbage|")
     ax.set_title("Naive: Repeated $U_A$", fontweight="bold")
-    ax.set_xlabel("signal amplitude")
-    ax.set_ylabel("garbage amplitude")
+    ax.set_xlabel("application step")
+    ax.set_ylabel("magnitude")
     ax.grid(alpha=0.25)
+    ax.legend(fontsize=8)
 
-    # --- Panel 2: interleaved trajectory ---
+    # --- Panel 2: interleaved magnitudes over applications ---
     ax = axes[0, 1]
-    ax.plot(p_states[:k+1, 0], p_states[:k+1, 1], "-o", color="#2e7d32", linewidth=2, markersize=4)
-    ax.set_title("Interleaved: $D\\,U_A$ with $D=\\mathrm{diag}(1,-1)$", fontweight="bold")
-    ax.set_xlabel("signal amplitude")
-    ax.set_ylabel("garbage amplitude")
+    ax.plot(steps, p_sig, "-o", color="#7b61ff", linewidth=2, markersize=4, label="|signal|")
+    ax.plot(steps, p_gar, "-o", color="#2e7d32", linewidth=2, markersize=4, label="|garbage|")
+    ax.set_title("Interleaved: $D(\\phi_j)U_A$", fontweight="bold")
+    ax.set_xlabel("application step")
+    ax.set_ylabel("magnitude")
     ax.grid(alpha=0.25)
+    ax.legend(fontsize=8)
 
-    all_states = np.vstack([n_states[:k+1], p_states[:k+1]])
-    lim = max(0.35, np.max(np.abs(all_states)) * 1.2)
+    ymax = max(0.15, np.max(np.concatenate([n_sig, n_gar, p_sig, p_gar])) * 1.2)
     for ax in [axes[0, 0], axes[0, 1]]:
-        ax.axhline(0, color="#999", linewidth=0.8, alpha=0.5)
-        ax.axvline(0, color="#999", linewidth=0.8, alpha=0.5)
-        ax.set_xlim(-lim, lim)
-        ax.set_ylim(-lim, lim)
-        ax.set_aspect("equal")
+        ax.set_xlim(0, max(1, depth))
+        ax.set_ylim(0, ymax)
+
+    # Show current applied phase for the interleaved path at this frame.
+    axes[0, 1].text(
+        0.02,
+        0.95,
+        f"current $\\phi_j$ = {phases[k-1]:+.2f} rad",
+        transform=axes[0, 1].transAxes,
+        ha="left",
+        va="top",
+        fontsize=9,
+        bbox=dict(facecolor="white", alpha=0.75, edgecolor="#bbb"),
+    )
 
     # --- Panel 3: contributions to signal at step k ---
     n_a, n_g = n_contrib[k-1]
@@ -197,10 +229,10 @@ def _draw_application_frame(depth, frame, sigma):
     ax.grid(axis="y", alpha=0.2)
 
     # Add signed annotations (to show cancellation direction)
-    ax.text(x[0] - width/2, abs(n_a) + 0.02, f"{n_a:+.2f}", ha="center", fontsize=8)
-    ax.text(x[0] + width/2, abs(n_g) + 0.02, f"{n_g:+.2f}", ha="center", fontsize=8)
-    ax.text(x[1] - width/2, abs(p_a) + 0.02, f"{p_a:+.2f}", ha="center", fontsize=8)
-    ax.text(x[1] + width/2, abs(p_g) + 0.02, f"{p_g:+.2f}", ha="center", fontsize=8)
+    ax.text(x[0] - width/2, abs(n_a) + 0.02, f"{np.real(n_a):+.2f}", ha="center", fontsize=8)
+    ax.text(x[0] + width/2, abs(n_g) + 0.02, f"{np.real(n_g):+.2f}", ha="center", fontsize=8)
+    ax.text(x[1] - width/2, abs(p_a) + 0.02, f"{np.real(p_a):+.2f}", ha="center", fontsize=8)
+    ax.text(x[1] + width/2, abs(p_g) + 0.02, f"{np.real(p_g):+.2f}", ha="center", fontsize=8)
 
     # --- Panel 4: current signal/garbage magnitudes ---
     ax = axes[1, 1]
@@ -214,7 +246,7 @@ def _draw_application_frame(depth, frame, sigma):
     ax.grid(axis="y", alpha=0.2)
 
     fig.suptitle(
-        f"Repeated Applications up to Step {k}/{depth} (sigma={sigma:.2f})",
+        f"Repeated Applications up to Step {k}/{depth} (sigma={sigma:.2f}, phase span={phase_span:.2f})",
         fontsize=12,
         fontweight="bold",
     )
@@ -277,14 +309,16 @@ destructively interfere and cancel exactly — no contamination.
     st.markdown("### Animated Intuition: Phase Steering in Action")
     st.caption(
         "Toy update model: start from [signal, garbage] = [1, 0], apply $U_A$ repeatedly, "
-        "and compare against interleaved updates $D U_A$ with $D=\\mathrm{diag}(1,-1)$."
+        "and compare against interleaved updates $D(\\phi_j)U_A$ with varying phase angles."
     )
 
-    c1, c2 = st.columns([1, 1])
+    c1, c2, c3 = st.columns([1, 1, 1])
     with c1:
         toy_depth = st.slider("Applications", 2, 24, 12, 1, key="s04_toy_depth")
     with c2:
         toy_sigma = st.slider("Singular value $\\sigma$", 0.55, 0.95, 0.80, 0.01, key="s04_toy_sigma")
+    with c3:
+        toy_span = st.slider("Phase span", 0.10, 1.40, 0.90, 0.05, key="s04_toy_span")
 
     f_col, p_col = st.columns([2, 1])
     with f_col:
@@ -295,19 +329,19 @@ destructively interfere and cancel exactly — no contamination.
     ph = st.empty()
     if play:
         for fr in range(toy_depth):
-            fig_anim = _draw_application_frame(toy_depth, fr, toy_sigma)
+            fig_anim = _draw_application_frame(toy_depth, fr, toy_sigma, toy_span)
             ph.pyplot(fig_anim, use_container_width=True)
             plt.close(fig_anim)
             time.sleep(0.08)
     else:
-        fig_anim = _draw_application_frame(toy_depth, frame, toy_sigma)
+        fig_anim = _draw_application_frame(toy_depth, frame, toy_sigma, toy_span)
         ph.pyplot(fig_anim, use_container_width=True)
         plt.close(fig_anim)
 
     with st.expander("How to read this animation", expanded=True):
         st.markdown(
-            "- **Top-left**: state trajectory under repeated $U_A$ only.\n"
-            "- **Top-right**: state trajectory under interleaved updates $D U_A$ (phase + block-encoding).\n"
+            "- **Top-left**: naive repeated $U_A$ magnitudes over steps (signal vs garbage).\n"
+            "- **Top-right**: interleaved $D(\\phi_j)U_A$ magnitudes over steps; the label shows current phase.\n"
             "- **Bottom-left**: for the current step, blue bar is A-path contribution to signal, orange bar is garbage leak-back contribution.\n"
             "- **Bottom-right**: resulting |signal| and |garbage| after the current step for both methods.\n"
             "- Desired pattern: interleaving reduces garbage while preserving signal."
