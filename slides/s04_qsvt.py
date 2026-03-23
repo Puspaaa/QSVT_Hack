@@ -144,13 +144,13 @@ def _evolve_state_2d(state, theta, alpha, apply_phase=False, phi=0.0):
         # Existing garbage is strongly damped under phase sequence, enabling cancellation.
         z_next = 0.22 * z + leak * np.cos(phi)
     else:
-        # No phase steering: leakage always points along the same in-plane axis.
-        leak = leak_strength * xy_rot[0]
-        z_next = 0.95 * z + leak
+        # No phase steering: leakage keeps adding in one direction, so garbage compounds.
+        leak = leak_strength * abs(xy_rot[0])
+        z_next = 1.03 * z + leak
 
     # More out-of-plane weight means worse projected in-plane quality.
     # Interleaved path should remain accurate; naive path drifts more under z growth.
-    proj_penalty = 0.03 if apply_phase else 0.20
+    proj_penalty = 0.03 if apply_phase else 0.25
     scale = max(0.05, 1.0 - proj_penalty * abs(z_next))
     xy_next = scale * xy_rot
 
@@ -191,6 +191,9 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
     fig = plt.figure(figsize=(14, 6))
     gs = fig.add_gridspec(1, 2, wspace=0.25)
     axes = [fig.add_subplot(gs[0, 0], projection="3d"), fig.add_subplot(gs[0, 1], projection="3d")]
+
+    z_all = np.concatenate([n_states[:k+1, 2], p_states[:k+1, 2]])
+    z_max = max(0.25, float(np.max(np.abs(z_all))) * 1.15)
 
     for ax_idx, (ax, label, states, col_traj, col_arrow) in enumerate([
         (axes[0], "Naive: repeated $U_A$", n_states, "#e67e22", "#ff6b35"),
@@ -249,7 +252,7 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
 
         ax.set_xlim(-1.10, 1.10)
         ax.set_ylim(-1.10, 1.10)
-        ax.set_zlim(-0.45, 0.75)
+        ax.set_zlim(-0.10 * z_max, z_max)
 
         z_curr = abs(states[k, 2])
         err_curr = np.linalg.norm(states[k, :2] - ideal_states[k, :2])
@@ -259,10 +262,10 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
               bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.85, edgecolor="#bbb"))
 
         if ax_idx == 1 and k > 0:
-                 ax.text2D(0.98, 0.02, f"$\\phi_j$ = {phases[k-1]:+.2f} rad",
-                     transform=ax.transAxes, ha="right", va="bottom",
-                     fontsize=10, bbox=dict(boxstyle="round,pad=0.5",
-                     facecolor="white", alpha=0.85, edgecolor="#bbb"))
+            ax.text2D(0.98, 0.02, f"$\\phi_j$ = {phases[k-1]:+.2f} rad",
+                      transform=ax.transAxes, ha="right", va="bottom",
+                      fontsize=10, bbox=dict(boxstyle="round,pad=0.5",
+                      facecolor="white", alpha=0.85, edgecolor="#bbb"))
 
     # Summary stats
     n_z_final = abs(n_states[k, 2])
