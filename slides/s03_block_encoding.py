@@ -229,9 +229,36 @@ On success (probability $\|A|\psi\rangle\|^2 / \alpha^2$) the data register cont
 
     st.markdown("---")
 
+    # ── Construction comes before failure mode ──
+    st.markdown(r"""
+### Stage 3: How to build a block encoding (LCU)
+
+To actually construct $U_A$, we use **Linear Combination of Unitaries (LCU)**.
+
+Decompose $A = \sum_i \alpha_i U_i$ where each $U_i$ is easy to implement. Then:
+
+1. **PREPARE**
+   $$|0\rangle \mapsto \sum_i \sqrt{|\alpha_i| / s}\, |i\rangle, \quad s = \sum_i |\alpha_i|$$
+2. **SELECT**
+   $$|i\rangle|\psi\rangle \mapsto |i\rangle\, U_i|\psi\rangle$$
+3. **UNPREPARE**
+   $$U_A = \text{PREPARE}^\dagger\, \text{SELECT}\, \text{PREPARE}$$
+
+This gives an $(s,a)$-block encoding of $A$.
+
+For our diffusion operator:
+
+$$A_{\text{diff}} = a_0 I + a_+ S + a_- S^\dagger$$
+
+so only three unitaries are needed. Here $S$ is cyclic shift:
+$S|j\rangle = |j+1 \bmod N\rangle$.
+""")
+
+    st.markdown("---")
+
     # ── The repeated-application problem ──
     st.markdown(r"""
-### Stage 3: Why naive repetition fails
+### Stage 4: Why naive repetition still fails
 
 Suppose we want to apply a **polynomial** of $A$, e.g.\ $p(A) = A^k$ (time evolution).  
 A naive approach: just apply $U_A$ repeatedly $k$ times with postselection after each step.
@@ -260,23 +287,6 @@ the wrong answer, and the success probability falls **exponentially** as $(\|A\|
         "garbage paths destructively interfere while signal paths add coherently. "
         "That gives a clean polynomial transform instead of contaminated block powers."
     )
-
-    st.markdown("---")
-
-    # ── LCU ──
-    st.markdown(r"""
-### How to build a block encoding: Linear Combination of Unitaries (LCU)
-
-Decompose $A = \sum_{i} \alpha_i\, U_i$ where each $U_i$ is easy to implement.  Then:
-
-1. **PREPARE** $|0\rangle \mapsto \sum_i \sqrt{\alpha_i / s}\; |i\rangle$, with $s = \sum |\alpha_i|$  
-2. **SELECT** $|i\rangle|\psi\rangle \mapsto |i\rangle\, U_i|\psi\rangle$  
-3. $U_A = \text{PREPARE}^\dagger \cdot \text{SELECT} \cdot \text{PREPARE}$ is an $(s, a)$-block encoding of $A$
-
-For our diffusion operator: $A_{\text{diff}} = a_0\, I + a_+\, S + a_-\, S^\dagger$ with just **2 ancilla qubits**.
-
-Here $S$ is the cyclic shift on the grid basis: $S|j\rangle = |j+1 \bmod N\rangle$.
-""")
 
     key_concept(
         "Block encoding is the <b>interface</b> between classical linear algebra and quantum circuits. "
