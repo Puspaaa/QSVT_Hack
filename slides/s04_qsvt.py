@@ -314,7 +314,8 @@ The phases steer interference: keep signal, cancel garbage.
 
 Consider the singular value decomposition $A/\alpha = \sum_i \sigma_i |u_i\rangle\langle v_i|$.
 
-Each $U_A$ mixes ancilla signal $|0\rangle$ and garbage $|\perp\rangle$ by an amount that
+In each two-dimensional signal/garbage invariant subspace (single-ancilla picture),
+$U_A$ mixes ancilla signal $|0\rangle$ and garbage $|\perp\rangle$ by an amount that
 depends on $\sigma_i$. Phase gates then shift these branches differently.
 
 Concretely, on ancilla states:
@@ -331,8 +332,9 @@ applications of $U_A$ is:
 
 $$\sigma_i \;\longmapsto\; P(\sigma_i)$$
 
-where $P$ is a **degree-$d$ polynomial** that we control.  The garbage terms
-destructively interfere and cancel exactly — no contamination.
+where $P$ is a **degree-$d$ polynomial** that we control. In the ideal synthesis
+model, garbage paths destructively interfere; in finite-precision implementations,
+small residual contamination can remain.
 """)
 
     st.caption(
@@ -343,7 +345,7 @@ destructively interfere and cancel exactly — no contamination.
     st.markdown("---")
     st.markdown("### Animated Intuition: Post-Selection & Phase Steering")
     st.caption(
-        "True 3D state-space view: (x, y) is the relevant signal plane, z is out-of-plane garbage. "
+        "Toy 3D pedagogical view: (x, y) is the relevant signal plane, z is out-of-plane garbage. "
         "Each $U_A$ rotates by $\\theta$ in-plane and leaks by $\\alpha$ out-of-plane; post-selection projects back to z=0."
     )
 
@@ -415,27 +417,6 @@ exact realisation of whatever polynomial we choose.
         The polynomial $P$ determines the algorithm;  
         the angles $\{\phi_j\}$ are found by **classical preprocessing**.
         """)
-
-    c_left, c_right = st.columns([1.25, 1])
-    with c_left:
-        st.success(
-            "**Angle-Design Checklist**\n"
-            "1. Pick target transform on singular values\n"
-            "2. Approximate with bounded polynomial $P$ on [-1, 1]\n"
-            "3. Enforce parity (even/odd or split into both)\n"
-            "4. Solve for phase angles $\\{\\phi_j\\}$ classically\n"
-            "5. Build phase-interleaved circuit and validate error"
-        )
-    with c_right:
-        st.markdown(
-            """
-**Mental model**
-
-- Polynomial design sets the transfer function
-- Angle synthesis compiles that transfer function
-- Circuit execution realizes it in $O(d)$ block-encoding queries
-"""
-        )
 
     st.markdown("---")
 

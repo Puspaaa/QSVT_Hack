@@ -242,6 +242,9 @@ Decompose $A = \sum_i \alpha_i U_i$ where each $U_i$ is easy to implement. Then:
 
 This gives an $(s,a)$-block encoding of $A$.
 
+Important caveat: $s = \sum_i |\alpha_i|$ can be much larger than $\|A\|$.
+That increases normalization overhead and lowers postselection success probability.
+
 For our diffusion operator:
 
 $$A_{\text{diff}} = a_0 I + a_+ S + a_- S^\dagger$$

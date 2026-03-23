@@ -37,6 +37,15 @@ Computing QSVT angles ($\{\phi_j\}$) from the target polynomial is a nontrivial
 classical optimization problem — the quantum algorithm alone is not enough.
 """)
 
+    st.markdown(r"""
+### When Quantum Helps (Checklist)
+
+- Large problem size ($N=2^n$) where classical memory/matvec become dominant
+- Structured state preparation (oracles/circuits), not arbitrary $O(N)$ loading
+- Observable-focused outputs (integrals, moments), not full tomography
+- Controlled postselection/approximation error so constants do not swamp asymptotics
+""")
+
     with col2:
         st.markdown("### What We Built")
         st.markdown("""

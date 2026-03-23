@@ -64,20 +64,23 @@ def _draw_interactive_approx(target_name: str, degree: int):
         title = f"step$(x - 0.3)$ — Chebyshev degree {degree}"
         ylim = (-0.5, 1.5)
     else:  # 1/x (bounded)
-        kappa = 0.1
-        y_target = np.where(np.abs(x) > kappa,
-                            kappa / x, np.sign(x) * 1.0).astype(float)
+        sigma_min = 0.1
+        y_target = np.where(np.abs(x) > sigma_min,
+                            sigma_min / x, np.sign(x) * 1.0).astype(float)
         n_fit = 600
         x_fit = np.cos(np.pi * np.arange(n_fit) / (n_fit - 1))
-        y_fit_raw = np.where(np.abs(x_fit) > kappa,
-                             kappa / x_fit, np.sign(x_fit) * 1.0).astype(float)
+        y_fit_raw = np.where(np.abs(x_fit) > sigma_min,
+                             sigma_min / x_fit, np.sign(x_fit) * 1.0).astype(float)
         coeffs = np.polynomial.chebyshev.chebfit(x_fit, y_fit_raw, degree)
         # enforce odd parity (1/x is odd)
         for i in range(len(coeffs)):
             if i % 2 == 0:
                 coeffs[i] = 0.0
         parity_label = "odd"
-        title = f"$\\kappa / x$ (bounded, $\\kappa={kappa}$) — Chebyshev degree {degree} ({parity_label})"
+        title = (
+            f"$\\sigma_{{\\min}} / x$ (bounded, $\\sigma_{{\\min}}={sigma_min}$) "
+            f"— Chebyshev degree {degree} ({parity_label})"
+        )
         ylim = (-1.45, 1.45)
 
     y_approx = chebval(x, coeffs)
@@ -170,9 +173,10 @@ $$
 
 Each part is implemented by a separate QSVT circuit, then combined.
 
-**Example — Hamiltonian simulation:** We want $e^{itx}$, which has no definite parity.  
-Instead we target the even function $e^{t(|x| - 1)}$, which agrees with $e^{t(x-1)}$ for $x \geq 0$
-and is naturally even.
+**Example — Hamiltonian simulation:** We want $e^{-itx}$, which has no definite parity.  
+Split it into even and odd channels:
+$$e^{-itx}=\cos(tx)-i\sin(tx).$$
+Then implement the cosine (even) and sine (odd) polynomials separately and recombine.
 """)
 
     st.markdown("---")
@@ -208,10 +212,11 @@ The **step** function (threshold at $0.3$):
         else:
             st.markdown(r"""
 **Matrix inversion** ($1/x$, bounded away from 0):
-- Pole at $x=0$ → truncated to $|\kappa/x| \leq 1$
+- Pole at $x=0$ → truncated to $|\sigma_{\min}/x| \leq 1$
 - Odd parity enforced
 - This is the polynomial behind HHL
-- Condition number $\kappa$ controls difficulty
+- Condition number is $\kappa = \sigma_{\max}/\sigma_{\min}$
+    (after normalization, often $\kappa \approx 1/\sigma_{\min}$)
             """)
 
     with col_plot:

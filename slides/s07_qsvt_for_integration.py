@@ -43,7 +43,7 @@ $$I \approx \langle D\,|\,u\rangle \;\cdot\; \frac{\sqrt{|D|}\;\|u\|}{N}$$
     method_stage = st.radio(
         "Recommended learning sequence",
         [
-            "1) Compute-Uncompute (baseline intuition)",
+            "1) Compute-Uncompute overlap test (baseline intuition)",
             "2) Arithmetic comparator (general interval marking)",
             "3) QSVT parity decomposition (polynomial approach)",
         ],
@@ -52,7 +52,7 @@ $$I \approx \langle D\,|\,u\rangle \;\cdot\; \frac{\sqrt{|D|}\;\|u\|}{N}$$
 
     if method_stage.startswith("1)"):
         st.markdown(r"""
-#### Compute-Uncompute (Swap Test)
+#### Compute-Uncompute (direct overlap test)
 
 **When:** Integration domain aligns with qubit structure ([0, 0.5], [0.25, 0.75], etc.)
 
@@ -60,9 +60,12 @@ $$I \approx \langle D\,|\,u\rangle \;\cdot\; \frac{\sqrt{|D|}\;\|u\|}{N}$$
 
 $$P(0^n) = |\langle D | u \rangle|^2$$
 
-**Complexity:** $O(n)$ depth — the lightest method.
+**Complexity:** $O(n)$ coherent depth for one trial (plus repeated shots).
 
 **Limitation:** Only works for intervals that align with binary partitions.
+
+This is not the controlled-ancilla swap test circuit; it is the compute-uncompute
+overlap trick using one state-preparation inverse.
 """)
 
     elif method_stage.startswith("2)"):
@@ -89,7 +92,10 @@ Uses Qiskit's `IntegerComparator` circuits.
 **When:** Arbitrary interval — the most general method.
 
 **Idea:** Approximate the **boxcar indicator** $\mathbb{1}_{[a,b]}$ as a polynomial in the
-eigenvalue $\lambda = \cos(\pi x)$ of a block-encoded cosine operator.
+spectral variable $\lambda = \cos(\pi x)$ of a block-encoded cosine/shift-derived operator.
+
+Why this map: QSVT acts on singular values in $[-1,1]$, and cosine naturally maps periodic
+grid frequencies to that interval.
 
 $$\mathbb{1}_{[a,b]}(x) \approx P_{\text{even}}(\lambda) + P_{\text{odd}}(\lambda)$$
 
@@ -99,6 +105,11 @@ Run one QSVT circuit per parity component, then combine estimates.
 """)
     st.caption(
         "In practice, higher degree reduces transition width but can increase numerical sensitivity."
+    )
+    st.warning(
+        "Sampling cost matters: estimating overlap probabilities to additive error $\\varepsilon$ "
+        "via shots needs $O(1/\\varepsilon^2)$ samples (or $O(1/\\varepsilon)$ with amplitude "
+        "estimation, not implemented here)."
     )
     reference("Gilyen2019")
 

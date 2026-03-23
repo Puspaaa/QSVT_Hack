@@ -82,6 +82,12 @@ especially for smooth initial data.
         - Diagonal phase rotations: $e^{-2\pi i k c t}$
         - Apply inverse QFT
         - **No polynomial approximation needed!**
+
+        Why this works: advection is translation,
+        $$\big(e^{-tc\partial_x}u\big)(x) = u(x-ct).$$
+        Fourier modes $e^{i\omega kx}$ are eigenfunctions of translation:
+        $$e^{-tc\partial_x}e^{i\omega kx}=e^{-i\omega kct}e^{i\omega kx}.$$
+        So in Fourier/QFT basis, advection is diagonal (just per-mode phases).
         """)
 
     st.markdown("---")

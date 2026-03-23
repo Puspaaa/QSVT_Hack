@@ -43,6 +43,11 @@ In other words, we can compress storage exponentially, but we still pay for
 state preparation and readout. For **structured** data (e.g., PDE solutions
 with known physics), efficient preparation exists.
 """)
+        st.warning(
+            "If state preparation and required readout are both $O(N)$, "
+            "the end-to-end quantum advantage disappears. "
+            "Speedups rely on structured preparation plus observable-focused outputs."
+        )
         reference("NC2000")
 
     with col_plot:
@@ -91,7 +96,8 @@ with known physics), efficient preparation exists.
         st.info(
             r"**Key point:** measuring the state many times yields a histogram "
             r"whose shape matches the encoded function. "
-            r"The normalisation $\|\vec{u}\|$ is tracked classically."
+            r"The normalisation $\|\vec{u}\|$ is tracked classically; practical algorithms "
+            r"typically estimate observables instead of reconstructing all amplitudes."
         )
 
     st.markdown("---")

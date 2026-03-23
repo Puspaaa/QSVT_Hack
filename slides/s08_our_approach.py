@@ -111,7 +111,7 @@ def render():
 
 **QSVT Angle Finding: `pyqsp` library**
 - Uses symmetric QSP angle-finding algorithm
-- Chebyshev coefficients → QSVT rotation angles
+- Chebyshev coefficients → QSP phases (mapped to QSVT phase sequence)
 - Classical preprocessing: $O(d^3)$
 
 **Polynomial Optimization: CVXPY**
@@ -146,11 +146,16 @@ def render():
 | Component | Classical | Quantum (QSVT) |
 |-----------|-----------|----------------|
 | **State storage** | $O(N)$ memory | $n = \log_2 N$ qubits |
-| **Matrix-vector multiply** | $O(N \cdot s)$ | $O(1)$ query to $U_A$ |
-| **Polynomial $P(A)$ of degree $d$** | $O(d \cdot N \cdot s)$ | $O(d)$ queries |
+| **Matrix-vector multiply** | $O(N \cdot s)$ | $O(1)$ oracle query to $U_A$ (each query uses $\mathrm{poly}(n)$ gates) |
+| **Polynomial $P(A)$ of degree $d$** | $O(d \cdot N \cdot s)$ | $O(d)$ oracle queries (+$\mathrm{poly}(n)$ gates/query) |
 | **Total per time step** | $O(d \cdot N)$ | $O(d \cdot \text{poly}(n))$ |
 | **Readout** | $O(1)$ per entry | $O(N/\epsilon^2)$ for full tomography |
 """)
+
+    st.caption(
+        "Query complexity and gate complexity are different metrics: "
+        "$O(1)$ or $O(d)$ above refers to oracle-query counts, not constant gate counts."
+    )
 
     st.warning(
         "**Caveat:** Full state readout negates the quantum advantage. "
