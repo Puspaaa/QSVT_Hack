@@ -149,6 +149,13 @@ REFERENCES = {
         "year": 2019,
         "url": "https://doi.org/10.1103/PhysRevA.99.012323",
     },
+    "Helle2025": {
+        "authors": "G. O. Helle, T. Benacchio, A. B. Ousager, J. E. Andersen",
+        "title": "A quantum advection-diffusion solver using the quantum singular value transform",
+        "venue": "arXiv:2512.22163",
+        "year": 2025,
+        "url": "https://arxiv.org/abs/2512.22163",
+    },
 }
 
 

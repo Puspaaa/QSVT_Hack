@@ -169,10 +169,55 @@ where $S$ is the QFT-based cyclic shift operator — only 3 terms!
     st.markdown("---")
 
     st.warning(
-        "Error sources are distinct: (1) Lie-Trotter splitting error, "
+        "Error sources are distinct: (1) Lie-Trotter splitting error O(Δt²), "
         "(2) spatial/time discretization choices, (3) polynomial approximation error, "
         "and (4) postselection sampling noise."
     )
+
+    # ── Alternative: Combined approach from the paper ──
+    st.markdown("---")
+    st.markdown("### Alternative: Combined Approach (Helle et al. 2025)")
+
+    with st.expander("📖 How the paper avoids Lie-Trotter splitting", expanded=True):
+        st.markdown(r"""
+Our app uses **Lie-Trotter splitting**: separate QSVT (diffusion) + QFT (advection) steps.
+This introduces a first-order splitting error $O(\Delta t^2)$ per step.
+
+The paper takes a fundamentally different route:
+
+**Step 1 — Encode the first derivative:**
+Block-encode $H = i\beta D_{2p}$ (the first-derivative finite-difference operator scaled by $i$).
+
+**Step 2 — Observe that $L$ is a polynomial in $H$:**
+$$L = -cD_{2p} + \nu D_{2p}^2 \quad\Rightarrow\quad e^{tL} = e^{t(-cD_{2p} + \nu D_{2p}^2)}$$
+Since $D_{2p}^2 \propto H^2/\beta^2$ and $D_{2p} \propto H/(i\beta)$, the entire exponent is a polynomial in $H$.
+
+**Step 3 — Single QSVT call with combined target:**
+$$f(x;\, M_1, M_2) = e^{-M_1 x^2 + i M_2 x}, \quad M_1 = \frac{\nu T}{\beta^2},\quad M_2 = \frac{cT}{\beta}$$
+
+This is implemented via the **Jacobi-Anger expansion** (even + odd Chebyshev decomposition).
+One QSVT call with $\approx O(M_1 + M_2)$ degree replaces the split diffusion + advection steps.
+
+**Result:** No Lie-Trotter splitting error. Gate complexity scales as $\tilde{O}(T^{1+1/(2p)}\,\varepsilon^{-1/(2p)})$ for order-$2p$ methods.
+""")
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.error("**Our approach**\n\n"
+                     "$e^{tL} \\approx e^{t\\nu\\nabla^2} \\cdot e^{-tc\\nabla}$ (split)\n\n"
+                     "Block-encode: Laplacian $\\partial_x^2$\n\n"
+                     "QSVT target: $e^{t(|x|-1)}$ (even, diffusion only)\n\n"
+                     "QFT: handles advection separately\n\n"
+                     "⚠️ Splitting error $O(\\Delta t^2)$")
+        with col_b:
+            st.success("**Paper's approach**\n\n"
+                       "$e^{tL}$ exactly via single QSVT call\n\n"
+                       "Block-encode: $H = i\\beta D_{2p}$ (first derivative)\n\n"
+                       "QSVT target: $f(x) = e^{-M_1 x^2 + iM_2 x}$ (combined)\n\n"
+                       "No QFT step needed\n\n"
+                       "✓ No splitting error")
+
+    reference("Helle2025")
 
     key_concept(
         "Our PDE solver <b>splits</b> the problem: QSVT handles the discrete diffusion operator, "

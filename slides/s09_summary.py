@@ -68,10 +68,10 @@ classical optimization problem — the quantum algorithm alone is not enough.
 
         st.markdown("### Future Directions")
         st.markdown("""
+- **Higher-order finite-difference block encodings** (see Helle et al. 2025): encoding $H = i\\beta D_{2p}$ eliminates Lie-Trotter error and improves accuracy per qubit
 - Error mitigation for NISQ hardware
-- Higher-order Trotter splitting
-- Amplitude estimation for integration
-- Extension to nonlinear PDEs
+- Amplitude estimation for integration (replacing postselection)
+- Extension to nonlinear PDEs (Carleman linearization)
 - Fault-tolerant resource estimation
 """)
 

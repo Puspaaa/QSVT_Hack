@@ -335,6 +335,9 @@ $$\sigma_i \;\longmapsto\; P(\sigma_i)$$
 where $P$ is a **degree-$d$ polynomial** that we control. In the ideal synthesis
 model, garbage paths destructively interfere; in finite-precision implementations,
 small residual contamination can remain.
+
+> **Precision note:** The QSVT circuit implements the polynomial $P$ to machine precision,
+> but $P$ is itself a Chebyshev *approximation* of the target function $f$ to within $\varepsilon$.
 """)
 
     st.caption(
@@ -345,7 +348,7 @@ small residual contamination can remain.
     st.markdown("---")
     st.markdown("### Animated Intuition: Post-Selection & Phase Steering")
     st.caption(
-        "Toy 3D pedagogical view: (x, y) is the relevant signal plane, z is out-of-plane garbage. "
+        "Schematic 3D analogy (model for intuition): (x, y) is the relevant signal plane, z is out-of-plane garbage. "
         "Each $U_A$ rotates by $\\theta$ in-plane and leaks by $\\alpha$ out-of-plane; post-selection projects back to z=0."
     )
 
@@ -427,14 +430,15 @@ exact realisation of whatever polynomial we choose.
 | Algorithm | Polynomial $P(\sigma)$ | Degree | Application |
 |-----------|----------------------|--------|-------------|
 | **Hamiltonian simulation** | $e^{-it\sigma}$ | $O(t + \log(1/\epsilon))$ | Time evolution |
-| **Matrix inversion (HHL)** | $1/\sigma$ | $O(\kappa/\epsilon)$ | Linear systems |
+| **Matrix inversion (HHL)** | $1/\sigma$ | $O(\kappa_{\mathrm{cond}}/\epsilon)$ | Linear systems |
 | **Amplitude amplification** | Chebyshev of $\sigma$ | $O(1/\sqrt{p})$ | Search |
 | **Phase estimation** | Step function | $O(1/\epsilon)$ | Eigenvalues |
 | **Quantum walks** | $\sigma \mapsto e^{i\arccos\sigma}$ | $O(1)$ | Graph problems |
 """)
 
     st.caption(
-        r"Here $p$ is initial success probability, $\kappa$ is condition number, and $\epsilon$ is approximation error."
+        r"Here $p$ is initial success probability, $\kappa_{\mathrm{cond}} = \alpha/\sigma_{\min}$ is the condition number "
+        r"($\sigma_{\min}$ = smallest singular value), and $\epsilon$ is approximation error."
     )
 
     key_concept(
