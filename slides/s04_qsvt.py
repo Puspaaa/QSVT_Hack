@@ -131,30 +131,35 @@ def _evolve_state_2d(state, theta, alpha, apply_phase=False, phi=0.0):
     """
     x, y, z = state
 
-    # In-plane action: every query rotates by theta in the relevant plane.
-    xy_rot = _rotate_2d(np.array([x, y]), theta)
+    # Encode in-plane state as a complex branch amplitude.
+    d = complex(x, y)
 
-    # Tuned so interleaved path stays close to ideal, while naive drifts.
+    # Each U_A rotates in the relevant in-plane subspace.
+    d_rot = d * np.exp(1j * theta)
+
+    # Explicit ancilla phase action from D(phi)=exp(i phi Z):
+    # data branch -> e^{+i phi}, garbage branch -> e^{-i phi}.
+    phi_eff = phi if apply_phase else 0.0
+    d_phase = d_rot * np.exp(1j * phi_eff)
+    z_phase = z * np.exp(-1j * phi_eff)
+
     leak_strength = 0.14 * np.sin(alpha)
+    # Leakage is injected from the phase-shifted data branch.
+    leak = leak_strength * np.real(d_phase)
 
     if apply_phase:
-        # Phase steering rotates the leakage axis in-plane.
-        leak_axis = np.array([np.cos(phi), np.sin(phi)])
-        leak = leak_strength * np.dot(xy_rot, leak_axis)
-        # Existing garbage is strongly damped under phase sequence, enabling cancellation.
-        z_next = 0.22 * z + leak * np.cos(phi)
+        # With interleaving, opposite phase rotation plus damping causes cancellation in garbage.
+        z_next = 0.22 * z_phase + leak
     else:
-        # No phase steering: leakage keeps adding in one direction, so garbage compounds.
-        leak = leak_strength * abs(xy_rot[0])
-        z_next = 1.03 * z + leak
+        # Without interleaving, leakage keeps reinforcing one out-of-plane direction.
+        z_next = 1.03 * z_phase + abs(leak)
 
-    # More out-of-plane weight means worse projected in-plane quality.
-    # Interleaved path should remain accurate; naive path drifts more under z growth.
+    # Out-of-plane buildup degrades the projected in-plane vector.
     proj_penalty = 0.03 if apply_phase else 0.25
     scale = max(0.05, 1.0 - proj_penalty * abs(z_next))
-    xy_next = scale * xy_rot
+    d_next = scale * d_rot
 
-    return np.array([xy_next[0], xy_next[1], z_next])
+    return np.array([np.real(d_next), np.imag(d_next), z_next], dtype=complex)
 
 
 def _simulate_trajectories_2d(depth, sigma, phase_span):
@@ -162,9 +167,9 @@ def _simulate_trajectories_2d(depth, sigma, phase_span):
     theta = 0.35
     alpha = np.arccos(np.clip(sigma, -1.0, 1.0))
 
-    n_states = [np.array([1.0, 0.0, 0.0])]
-    p_states = [np.array([1.0, 0.0, 0.0])]
-    ideal_states = [np.array([1.0, 0.0, 0.0])]
+    n_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j, 0.0 + 0.0j], dtype=complex)]
+    p_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j, 0.0 + 0.0j], dtype=complex)]
+    ideal_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j, 0.0 + 0.0j], dtype=complex)]
 
     if depth <= 1:
         phases = np.array([phase_span])
@@ -178,7 +183,7 @@ def _simulate_trajectories_2d(depth, sigma, phase_span):
 
         # Ideal action: only in-plane rotation, no out-of-plane leakage.
         ideal_xy = _rotate_2d(ideal_states[-1][:2], theta)
-        ideal_states.append(np.array([ideal_xy[0], ideal_xy[1], 0.0]))
+        ideal_states.append(np.array([ideal_xy[0], ideal_xy[1], 0.0 + 0.0j], dtype=complex))
 
     return np.array(n_states), np.array(p_states), np.array(ideal_states), phases, theta, alpha
 
@@ -192,8 +197,8 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
     gs = fig.add_gridspec(1, 2, wspace=0.25)
     axes = [fig.add_subplot(gs[0, 0], projection="3d"), fig.add_subplot(gs[0, 1], projection="3d")]
 
-    z_all = np.concatenate([n_states[:k+1, 2], p_states[:k+1, 2]])
-    z_max = max(0.25, float(np.max(np.abs(z_all))) * 1.15)
+    z_all = np.concatenate([np.abs(n_states[:k+1, 2]), np.abs(p_states[:k+1, 2])])
+    z_max = max(0.25, float(np.max(z_all)) * 1.15)
 
     for ax_idx, (ax, label, states, col_traj, col_arrow) in enumerate([
         (axes[0], "Naive: repeated $U_A$", n_states, "#e67e22", "#ff6b35"),
@@ -202,10 +207,10 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
         ax.grid(True, alpha=0.25)
         ax.view_init(elev=28, azim=-55)
 
-        xy = states[:k+1, :2]
-        z_vals = states[:k+1, 2]
-        z_abs = np.abs(z_vals)
-        ideal_xy = ideal_states[:k+1, :2]
+        xy = np.real(states[:k+1, :2])
+        z_vals = np.abs(states[:k+1, 2])
+        z_abs = z_vals
+        ideal_xy = np.real(ideal_states[:k+1, :2])
 
         # Draw the relevant signal plane z=0 and ideal in-plane unit-circle trajectory.
         plane_u = np.linspace(-1.05, 1.05, 20)
@@ -254,8 +259,8 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
         ax.set_ylim(-1.10, 1.10)
         ax.set_zlim(-0.10 * z_max, z_max)
 
-        z_curr = abs(states[k, 2])
-        err_curr = np.linalg.norm(states[k, :2] - ideal_states[k, :2])
+        z_curr = float(abs(states[k, 2]))
+        err_curr = float(np.linalg.norm(np.real(states[k, :2] - ideal_states[k, :2])))
         ax.text2D(0.98, 0.98,
               f"|z|={z_curr:.3f}\\nproj error={err_curr:.3f}",
               transform=ax.transAxes, ha="right", va="top", fontsize=9,
@@ -268,10 +273,10 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
                       facecolor="white", alpha=0.85, edgecolor="#bbb"))
 
     # Summary stats
-    n_z_final = abs(n_states[k, 2])
-    p_z_final = abs(p_states[k, 2])
-    n_proj_err = np.linalg.norm(n_states[k, :2] - ideal_states[k, :2])
-    p_proj_err = np.linalg.norm(p_states[k, :2] - ideal_states[k, :2])
+    n_z_final = float(abs(n_states[k, 2]))
+    p_z_final = float(abs(p_states[k, 2]))
+    n_proj_err = float(np.linalg.norm(np.real(n_states[k, :2] - ideal_states[k, :2])))
+    p_proj_err = float(np.linalg.norm(np.real(p_states[k, :2] - ideal_states[k, :2])))
 
     fig.text(0.5, 0.08,
             f"Step {k}/{depth} | "
@@ -344,7 +349,8 @@ destructively interfere and cancel exactly — no contamination.
     st.markdown("### Animated Intuition: Post-Selection & Phase Steering")
     st.caption(
         "True 3D state-space view: (x, y) is the relevant signal plane, z is out-of-plane garbage. "
-        "Each $U_A$ rotates by $\\theta$ in-plane and leaks by $\\alpha$ out-of-plane; post-selection projects back to z=0."
+        "Each $U_A$ rotates by $\\theta$ in-plane and leaks by $\\alpha$ out-of-plane; post-selection projects back to z=0. "
+        "In the interleaved panel we explicitly apply $D(\\phi_j)=e^{i\\phi_j Z}$ so data and garbage branches pick opposite phases."
     )
 
     c1, c2, c3 = st.columns([1, 1, 1])
@@ -386,6 +392,7 @@ destructively interfere and cancel exactly — no contamination.
 
 **Right panel (Interleaved):** $D(\\phi_j)U_A$
 - Phase rotations change leakage direction every step.
+- Toy update uses $d \\mapsto e^{+i\\phi_j}d$ and $g \\mapsto e^{-i\\phi_j}g$ explicitly.
 - Out-of-plane pieces interfere destructively, so z stays small.
 - The projected final point stays close to the ideal target (high accuracy).
 
