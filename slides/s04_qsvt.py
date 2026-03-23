@@ -109,157 +109,112 @@ def _draw_qsvt_intuition():
     plt.close(fig)
 
 
-def _toy_channel_sums(depth, frame, sigma, phase_span):
-    """Toy phasor model for intuition (not an exact QSVT simulation).
+def _step_update(state, sigma, beta, interleaved=False):
+    """One toy update step for [signal, garbage] amplitudes.
 
-    Returns complex sums for signal/garbage in naive vs phase-steered setting
-    up to the selected frame index.
+    If interleaved=True, apply a phase rotation equivalent to D=diag(1,-1)
+    on [signal, garbage] before U_A (global phase ignored).
     """
-    k = min(frame + 1, depth)
-    idx = np.arange(k)
-
-    # Garbage channel: naive phases stay roughly aligned; phase-steered alternates.
-    g_amp = (1.0 - sigma) * (0.86 ** idx)
-    g_naive_phase = 0.18 * idx
-    g_qsvt_phase = 0.18 * idx + ((-1) ** idx) * phase_span
-
-    g_naive = np.sum(g_amp * np.exp(1j * g_naive_phase))
-    g_qsvt = np.sum(g_amp * np.exp(1j * g_qsvt_phase))
-
-    # Signal channel: naive drifts more; phase-steered stays closer to aligned.
-    s_amp = sigma * (0.94 ** idx)
-    s_naive_phase = 0.28 * idx
-    s_qsvt_phase = 0.06 * idx
-
-    s_naive = np.sum(s_amp * np.exp(1j * s_naive_phase))
-    s_qsvt = np.sum(s_amp * np.exp(1j * s_qsvt_phase))
-
-    return (s_naive, s_qsvt, g_naive, g_qsvt), (s_amp, s_naive_phase, s_qsvt_phase, g_amp, g_naive_phase, g_qsvt_phase)
-
-
-def _draw_phasors(ax, amps, phases, title, color):
-    """Draw contribution phasors and their resultant on complex plane."""
-    vecs = amps * np.exp(1j * phases)
-    total = np.sum(vecs)
-
-    for z in vecs:
-        ax.arrow(0, 0, np.real(z), np.imag(z),
-                 head_width=0.03, head_length=0.05,
-                 length_includes_head=True, linewidth=1.1,
-                 color=color, alpha=0.25)
-
-    ax.arrow(0, 0, np.real(total), np.imag(total),
-             head_width=0.05, head_length=0.08,
-             length_includes_head=True, linewidth=2.2,
-             color=color, alpha=0.95)
-
-    lim = max(
-        0.45,
-        np.max(np.abs(vecs)) * 1.8,
-        np.abs(total) * 1.25,
-    )
-    ax.axhline(0, color="#999", linewidth=0.7, alpha=0.5)
-    ax.axvline(0, color="#999", linewidth=0.7, alpha=0.5)
-    ax.set_xlim(-lim, lim)
-    ax.set_ylim(-lim, lim)
-    ax.set_aspect("equal")
-    ax.set_title(title, fontsize=11, fontweight="bold")
-    ax.grid(alpha=0.2)
-    ax.set_xlabel("Re")
-    ax.set_ylabel("Im")
-
-
-def _draw_cumulative_chain(ax, amps, phases, title, color):
-    """Draw tail-to-head cumulative phasor addition chain."""
-    vecs = amps * np.exp(1j * phases)
-    tail = 0 + 0j
-    points = [tail]
-
-    for z in vecs:
-        head = tail + z
-        ax.arrow(np.real(tail), np.imag(tail),
-                 np.real(z), np.imag(z),
-                 head_width=0.03, head_length=0.05,
-                 length_includes_head=True, linewidth=1.4,
-                 color=color, alpha=0.45)
-        tail = head
-        points.append(tail)
-
-    # Resultant from origin for visual comparison
-    ax.arrow(0, 0, np.real(tail), np.imag(tail),
-             head_width=0.05, head_length=0.08,
-             length_includes_head=True, linewidth=2.2,
-             linestyle='--', color=color, alpha=0.95)
-
-    pts = np.array(points)
-    max_coord = np.max(np.abs(np.concatenate([np.real(pts), np.imag(pts)]))) if len(pts) else 0.0
-    lim = max(
-        0.45,
-        np.max(np.abs(vecs)) * 1.8,
-        np.abs(tail) * 1.25,
-        max_coord * 1.2,
-    )
-    ax.axhline(0, color="#999", linewidth=0.7, alpha=0.5)
-    ax.axvline(0, color="#999", linewidth=0.7, alpha=0.5)
-    ax.set_xlim(-lim, lim)
-    ax.set_ylim(-lim, lim)
-    ax.set_aspect("equal")
-    ax.set_title(title, fontsize=11, fontweight="bold")
-    ax.grid(alpha=0.2)
-    ax.set_xlabel("Re")
-    ax.set_ylabel("Im")
-
-
-def _draw_phase_animation_frame(depth, frame, sigma, phase_span, view_mode):
-    """Render one frame of the toy interference animation."""
-    sums, channels = _toy_channel_sums(depth, frame, sigma, phase_span)
-    s_naive, s_qsvt, g_naive, g_qsvt = sums
-    s_amp, s_naive_phase, s_qsvt_phase, g_amp, g_naive_phase, g_qsvt_phase = channels
-
-    fig, axes = plt.subplots(1, 3, figsize=(13, 3.8))
-
-    if view_mode == "Cumulative (tail-to-head)":
-        _draw_cumulative_chain(
-            axes[0],
-            g_amp,
-            g_naive_phase,
-            "Naive Garbage (Cumulative)",
-            "#e67e22",
-        )
-        _draw_cumulative_chain(
-            axes[1],
-            g_amp,
-            g_qsvt_phase,
-            "Phase-Steered Garbage (Cumulative)",
-            "#2e7d32",
-        )
+    s_prev, g_prev = state
+    if interleaved:
+        s_in, g_in = s_prev, -g_prev
     else:
-        _draw_phasors(
-            axes[0],
-            g_amp,
-            g_naive_phase,
-            "Naive Garbage Phasors",
-            "#e67e22",
-        )
-        _draw_phasors(
-            axes[1],
-            g_amp,
-            g_qsvt_phase,
-            "Phase-Steered Garbage Phasors",
-            "#2e7d32",
-        )
+        s_in, g_in = s_prev, g_prev
 
-    labels = ["|S| naive", "|S| QSVT", "|G| naive", "|G| QSVT"]
-    vals = [np.abs(s_naive), np.abs(s_qsvt), np.abs(g_naive), np.abs(g_qsvt)]
+    # Signal receives an A-path term plus a leak-back garbage term.
+    contrib_a_to_signal = sigma * s_in
+    contrib_g_to_signal = -beta * g_in
+
+    s_next = contrib_a_to_signal + contrib_g_to_signal
+    g_next = beta * s_in + sigma * g_in
+    return np.array([s_next, g_next]), contrib_a_to_signal, contrib_g_to_signal
+
+
+def _simulate_histories(depth, sigma):
+    """Simulate naive vs phase-interleaved repeated application histories."""
+    beta = np.sqrt(max(0.0, 1.0 - sigma**2))
+    n_states = [np.array([1.0, 0.0])]
+    p_states = [np.array([1.0, 0.0])]
+    n_contrib = []
+    p_contrib = []
+
+    for _ in range(depth):
+        n_next, n_a, n_g = _step_update(n_states[-1], sigma, beta, interleaved=False)
+        p_next, p_a, p_g = _step_update(p_states[-1], sigma, beta, interleaved=True)
+        n_states.append(n_next)
+        p_states.append(p_next)
+        n_contrib.append((n_a, n_g))
+        p_contrib.append((p_a, p_g))
+
+    return np.array(n_states), np.array(p_states), n_contrib, p_contrib
+
+
+def _draw_application_frame(depth, frame, sigma):
+    """Draw one frame of repeated U_A vs phase-interleaved applications."""
+    n_states, p_states, n_contrib, p_contrib = _simulate_histories(depth, sigma)
+    k = min(frame + 1, depth)
+
+    fig, axes = plt.subplots(2, 2, figsize=(13, 8.5), gridspec_kw={"hspace": 0.32, "wspace": 0.25})
+
+    # --- Panel 1: naive trajectory in (signal, garbage) plane ---
+    ax = axes[0, 0]
+    ax.plot(n_states[:k+1, 0], n_states[:k+1, 1], "-o", color="#e67e22", linewidth=2, markersize=4)
+    ax.set_title("Naive: Repeated $U_A$", fontweight="bold")
+    ax.set_xlabel("signal amplitude")
+    ax.set_ylabel("garbage amplitude")
+    ax.grid(alpha=0.25)
+
+    # --- Panel 2: interleaved trajectory ---
+    ax = axes[0, 1]
+    ax.plot(p_states[:k+1, 0], p_states[:k+1, 1], "-o", color="#2e7d32", linewidth=2, markersize=4)
+    ax.set_title("Interleaved: $D\\,U_A$ with $D=\\mathrm{diag}(1,-1)$", fontweight="bold")
+    ax.set_xlabel("signal amplitude")
+    ax.set_ylabel("garbage amplitude")
+    ax.grid(alpha=0.25)
+
+    all_states = np.vstack([n_states[:k+1], p_states[:k+1]])
+    lim = max(0.35, np.max(np.abs(all_states)) * 1.2)
+    for ax in [axes[0, 0], axes[0, 1]]:
+        ax.axhline(0, color="#999", linewidth=0.8, alpha=0.5)
+        ax.axvline(0, color="#999", linewidth=0.8, alpha=0.5)
+        ax.set_xlim(-lim, lim)
+        ax.set_ylim(-lim, lim)
+        ax.set_aspect("equal")
+
+    # --- Panel 3: contributions to signal at step k ---
+    n_a, n_g = n_contrib[k-1]
+    p_a, p_g = p_contrib[k-1]
+    ax = axes[1, 0]
+    x = np.arange(2)
+    width = 0.35
+    ax.bar(x - width/2, [abs(n_a), abs(p_a)], width, color="#4a90d9", alpha=0.85, label="A-path -> signal")
+    ax.bar(x + width/2, [abs(n_g), abs(p_g)], width, color="#e67e22", alpha=0.85, label="garbage leak-back -> signal")
+    ax.set_xticks(x)
+    ax.set_xticklabels(["naive", "interleaved"])
+    ax.set_ylabel("|contribution|")
+    ax.set_title(f"Step {k}: Signal-Update Contributions", fontweight="bold")
+    ax.legend(fontsize=8)
+    ax.grid(axis="y", alpha=0.2)
+
+    # Add signed annotations (to show cancellation direction)
+    ax.text(x[0] - width/2, abs(n_a) + 0.02, f"{n_a:+.2f}", ha="center", fontsize=8)
+    ax.text(x[0] + width/2, abs(n_g) + 0.02, f"{n_g:+.2f}", ha="center", fontsize=8)
+    ax.text(x[1] - width/2, abs(p_a) + 0.02, f"{p_a:+.2f}", ha="center", fontsize=8)
+    ax.text(x[1] + width/2, abs(p_g) + 0.02, f"{p_g:+.2f}", ha="center", fontsize=8)
+
+    # --- Panel 4: current signal/garbage magnitudes ---
+    ax = axes[1, 1]
+    labels = ["|signal| naive", "|signal| interleaved", "|garbage| naive", "|garbage| interleaved"]
+    vals = [abs(n_states[k, 0]), abs(p_states[k, 0]), abs(n_states[k, 1]), abs(p_states[k, 1])]
     cols = ["#4a90d9", "#7b61ff", "#e67e22", "#2e7d32"]
-    axes[2].bar(labels, vals, color=cols, alpha=0.85)
-    axes[2].set_title("Resultant Magnitudes", fontsize=11, fontweight="bold")
-    axes[2].set_ylabel("Magnitude")
-    axes[2].tick_params(axis="x", rotation=15)
-    axes[2].grid(axis="y", alpha=0.2)
+    ax.bar(labels, vals, color=cols, alpha=0.85)
+    ax.set_title("State Magnitudes After Step", fontweight="bold")
+    ax.set_ylabel("magnitude")
+    ax.tick_params(axis="x", rotation=15)
+    ax.grid(axis="y", alpha=0.2)
 
     fig.suptitle(
-        f"Toy Interference Frame {frame + 1}/{depth} (sigma={sigma:.2f})",
+        f"Repeated Applications up to Step {k}/{depth} (sigma={sigma:.2f})",
         fontsize=12,
         fontweight="bold",
     )
@@ -321,23 +276,15 @@ destructively interfere and cancel exactly — no contamination.
     st.markdown("---")
     st.markdown("### Animated Intuition: Phase Steering in Action")
     st.caption(
-        "Toy model for intuition (not an exact QSVT simulator): each layer contributes a complex phasor. "
-        "Naive phases keep garbage more aligned; phase steering spreads garbage phases so they cancel."
+        "Toy update model: start from [signal, garbage] = [1, 0], apply $U_A$ repeatedly, "
+        "and compare against interleaved updates $D U_A$ with $D=\\mathrm{diag}(1,-1)$."
     )
 
-    c1, c2, c3, c4 = st.columns([1, 1, 1, 1.2])
+    c1, c2 = st.columns([1, 1])
     with c1:
-        toy_depth = st.slider("Toy depth", 4, 24, 12, 1, key="s04_toy_depth")
+        toy_depth = st.slider("Applications", 2, 24, 12, 1, key="s04_toy_depth")
     with c2:
         toy_sigma = st.slider("Singular value $\\sigma$", 0.55, 0.95, 0.80, 0.01, key="s04_toy_sigma")
-    with c3:
-        toy_span = st.slider("Phase span", 0.20, 1.60, 1.00, 0.05, key="s04_toy_span")
-    with c4:
-        view_mode = st.selectbox(
-            "Vector view",
-            ["Resultant + contributions", "Cumulative (tail-to-head)"],
-            key="s04_toy_view_mode",
-        )
 
     f_col, p_col = st.columns([2, 1])
     with f_col:
@@ -348,27 +295,26 @@ destructively interfere and cancel exactly — no contamination.
     ph = st.empty()
     if play:
         for fr in range(toy_depth):
-            fig_anim = _draw_phase_animation_frame(toy_depth, fr, toy_sigma, toy_span, view_mode)
+            fig_anim = _draw_application_frame(toy_depth, fr, toy_sigma)
             ph.pyplot(fig_anim, use_container_width=True)
             plt.close(fig_anim)
             time.sleep(0.08)
     else:
-        fig_anim = _draw_phase_animation_frame(toy_depth, frame, toy_sigma, toy_span, view_mode)
+        fig_anim = _draw_application_frame(toy_depth, frame, toy_sigma)
         ph.pyplot(fig_anim, use_container_width=True)
         plt.close(fig_anim)
 
     with st.expander("How to read this animation", expanded=True):
         st.markdown(
-            "- **Left panel**: garbage-channel phasors for naive repeated application.\n"
-            "- **Middle panel**: garbage-channel phasors with phase steering.\n"
-            "- **Right bars**: resultant magnitudes for signal and garbage in naive vs steered settings.\n"
-            "- In **Resultant + contributions** view: faint arrows are per-layer contributions, bold arrow is their sum.\n"
-            "- In **Cumulative** view: arrows are added tail-to-head so cancellation is visible geometrically.\n"
-            "- Goal pattern: $|G|$ shrinks under steering while $|S|$ remains large."
+            "- **Top-left**: state trajectory under repeated $U_A$ only.\n"
+            "- **Top-right**: state trajectory under interleaved updates $D U_A$ (phase + block-encoding).\n"
+            "- **Bottom-left**: for the current step, blue bar is A-path contribution to signal, orange bar is garbage leak-back contribution.\n"
+            "- **Bottom-right**: resulting |signal| and |garbage| after the current step for both methods.\n"
+            "- Desired pattern: interleaving reduces garbage while preserving signal."
         )
 
     st.info(
-        "Practical cue: increase phase span and depth to see stronger garbage cancellation in this toy model."
+        "This is an intuition model: it isolates repeated-application mixing and shows how interleaved phases can suppress garbage leak-back."
     )
 
     st.markdown("---")
