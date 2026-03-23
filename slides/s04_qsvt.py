@@ -112,36 +112,41 @@ def _draw_qsvt_intuition():
 def _evolve_state_2d(state, sigma, beta, apply_phase=False, phi=0.0):
     """Apply U_A (optionally with phase gate) to [signal, garbage] state.
     
-    Real evolution: U_A causes mixing, garbage grows.
-    With phase gate D(phi), the garbage direction changes each step.
+    Key insight: phase gates don't affect magnitudes (|e^{i phi} z| = |z|).
+    Instead, they control the DIRECTION garbage leaks.
+    
+    Model: garbage leaks as e^{i * leak_angle}, where leak_angle depends on phase.
+    - Without phase: leak_angle is fixed → garbage accumulates monotonically
+    - With phase: leak_angle varies → garbage oscillates (real parts can cancel)
     """
-    s_prev, g_prev = state
+    s_real, g_real = np.real(state[0]), np.real(state[1])
     
-    # Apply phase gate if interleaved: rotates signal and garbage oppositely
-    if apply_phase:
-        s_in = np.exp(1j * phi) * s_prev
-        g_in = np.exp(-1j * phi) * g_prev
-    else:
-        s_in, g_in = s_prev, g_prev
+    # U_A causes signal to decrease slightly, garbage to leak in
+    # Leak angle: without phase it's fixed (0), with phase it varies
+    leak_angle = phi if apply_phase else 0.0
     
-    # U_A mixes signal and garbage: keeps signal, mixes in garbage
-    s_next = sigma * s_in - beta * g_in
-    g_next = beta * s_in + sigma * g_in
+    # Garbage contribution: leaks in direction determined by leak_angle
+    garbage_leak = beta * s_real * np.exp(1j * leak_angle)
     
-    return np.array([s_next, g_next])
+    s_next = sigma * s_real - 0.1 * g_real  # small damping from existing garbage
+    g_next = g_real + garbage_leak  # accumulate new garbage in direction determined by phase
+    
+    return np.array([s_next + 0.0j, g_next])
 
 
 def _simulate_trajectories_2d(depth, sigma, phase_span):
-    """Track full state trajectory for both methods WITHOUT resetting garbage."""
+    """Track full state trajectory for both methods.
+    
+    Key difference:
+    - Naive: garbage always leaks in direction 0 → accumulates upward
+    - Interleaved: garbage leaks in directions that vary → oscillations
+    """
     beta = np.sqrt(max(0.0, 1.0 - sigma**2))
     
-    # Naive: repeated U_A only (no phase reset between iterations)
     n_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
-    
-    # Phase-interleaved: U_A with phase gates
     p_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
     
-    # Phase schedule
+    # Phase schedule that oscillates
     if depth <= 1:
         phases = np.array([phase_span])
     else:
@@ -149,11 +154,11 @@ def _simulate_trajectories_2d(depth, sigma, phase_span):
         phases = phase_span * np.cos(np.pi * t)
     
     for idx in range(depth):
-        # Naive: state evolves with garbage accumulation
+        # Naive: phase is always 0, garbage leaks in same direction
         n_next = _evolve_state_2d(n_states[-1], sigma, beta, apply_phase=False)
         n_states.append(n_next)
         
-        # Interleaved: phase gates redirect garbage at each step
+        # Interleaved: phase varies, garbage leaks in different directions
         p_next = _evolve_state_2d(p_states[-1], sigma, beta, apply_phase=True, phi=phases[idx])
         p_states.append(p_next)
     
@@ -177,59 +182,63 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
         ax.grid(True, alpha=0.2)
         ax.set_aspect("equal")
         
-        # Extract real parts for plotting (ignoring complex phase for now)
-        s_traj = np.real(states[:k+1, 0])
-        g_traj = np.real(states[:k+1, 1])
+        # Extract real and imaginary parts of garbage for 2D plot
+        # Signal is on x-axis, garbage oscillates in complex plane
+        s_vals = np.real(states[:k+1, 0])
+        g_real = np.real(states[:k+1, 1])
+        g_imag = np.imag(states[:k+1, 1])
+        g_mag = np.sqrt(g_real**2 + g_imag**2)
         
-        # Plot trajectory of states
-        ax.plot(s_traj, g_traj, "-", color=col_traj, linewidth=3, alpha=0.8, 
-               label="Full state (signal, garbage)", zorder=2)
+        # Plot trajectory in (signal, garbage-magnitude) space
+        ax.plot(s_vals, g_mag, "-", color=col_traj, linewidth=3, alpha=0.8, 
+               label="Full state evolution", zorder=2)
         
-        # Draw arrows at each step to show direction
+        # Draw arrows at each step
         for i in range(k):
             if i < len(states) - 1:
-                x0, y0 = s_traj[i], g_traj[i]
-                x1, y1 = s_traj[i+1], g_traj[i+1]
+                x0, y0 = s_vals[i], g_mag[i]
+                x1, y1 = s_vals[i+1], g_mag[i+1]
                 dx, dy = x1 - x0, y1 - y0
-                ax.arrow(x0, y0, dx*0.85, dy*0.85, head_width=0.03, head_length=0.04,
-                        fc=col_arrow, ec=col_arrow, alpha=0.9, zorder=3, linewidth=1.2)
+                if np.sqrt(dx**2 + dy**2) > 0.005:
+                    ax.arrow(x0, y0, dx*0.85, dy*0.85, head_width=0.03, head_length=0.04,
+                            fc=col_arrow, ec=col_arrow, alpha=0.9, zorder=3, linewidth=1.2)
         
-        # Plot state dots: color indicates signal-to-garbage ratio
+        # Plot dots at each step
         for i in range(k+1):
-            s_mag = abs(s_traj[i])
-            g_mag = abs(g_traj[i])
-            total = s_mag + g_mag + 0.001
-            ratio = s_mag / total  # 1 = all signal, 0 = all garbage
-            # Red = garbage-dominated, Blue = signal-dominated
+            s_mag = abs(s_vals[i])
+            total = s_mag + g_mag[i] + 0.001
+            ratio = s_mag / total
             dot_color = plt.cm.RdYlBu(0.7 + 0.3*ratio)  
-            ax.plot(s_traj[i], g_traj[i], 'o', color=dot_color, markersize=7, 
-                   alpha=0.8, zorder=4, markeredgecolor="black", markeredgewidth=0.6)
-            # Add step number
-            ax.text(s_traj[i] + 0.02, g_traj[i] + 0.02, str(i), fontsize=7, alpha=0.6)
+            ax.plot(s_vals[i], g_mag[i], 'o', color=dot_color, markersize=7, 
+                   alpha=0.85, zorder=4, markeredgecolor="black", markeredgewidth=0.6)
+            ax.text(s_vals[i] + 0.02, g_mag[i] + 0.02, str(i), fontsize=7, alpha=0.6)
         
-        # Show post-selection measurement: signal value at current step
-        # (vertical line down from current point to x-axis)
-        current_s = s_traj[k]
-        current_g = g_traj[k]
+        # For interleaved, show garbage direction field
+        if ax_idx == 1:
+            for i in range(k):
+                if g_mag[i] > 0.01:
+                    ax.arrow(s_vals[i], 0.01, g_real[i]*0.15, g_imag[i]*0.15,
+                            head_width=0.015, head_length=0.015,
+                            fc="#666", ec="#999", alpha=0.25, zorder=1, linewidth=0.8)
+        
+        # Post-selection projection
+        current_s = s_vals[k]
+        current_g = g_mag[k]
         ax.plot([current_s, current_s], [current_g, 0], "--", color="#4a90d9", 
-               linewidth=2, alpha=0.6, label="Measure signal (project to x-axis)", zorder=1)
-        ax.plot(current_s, 0, "X", color="#4a90d9", markersize=12, alpha=0.8, 
+               linewidth=2, alpha=0.6, label="Measure signal", zorder=1)
+        ax.plot(current_s, 0, "X", color="#4a90d9", markersize=12, alpha=0.85, 
                markeredgewidth=2, markeredgecolor="navy", zorder=5)
         
-        # Labels
-        ax.set_xlabel("Signal amplitude (Re)", fontsize=11, fontweight="bold")
-        ax.set_ylabel("Garbage amplitude (Re)", fontsize=11, fontweight="bold")
+        # Labels and limits
+        ax.set_xlabel("Signal amplitude (real)", fontsize=11, fontweight="bold")
+        ax.set_ylabel("Garbage magnitude |G|", fontsize=11, fontweight="bold")
         ax.set_title(label, fontsize=12, fontweight="bold", pad=10)
         ax.legend(fontsize=9, loc="upper left")
         
-        # Dynamic limits
-        all_s = np.abs(s_traj)
-        all_g = np.abs(g_traj)
-        lim = max(0.2, max(np.max(all_s), np.max(all_g)) * 1.3)
+        lim = max(0.2, max(np.max(np.abs(s_vals)), np.max(g_mag)) * 1.3)
         ax.set_xlim(-0.05, lim)
         ax.set_ylim(-0.05, lim)
         
-        # Phase label for interleaved
         if ax_idx == 1 and k > 0:
             ax.text(0.98, 0.02, f"$\\phi_j$ = {phases[k-1]:+.2f} rad",
                    transform=ax.transAxes, ha="right", va="bottom",
@@ -244,9 +253,9 @@ def _draw_geometry_frame(depth, frame, sigma, phase_span):
     
     fig.text(0.5, 0.08,
             f"Step {k}/{depth} | "
-            f"NAIVE: signal={n_s_final:.3f}, garbage={n_g_final:.3f}  |  "
-            f"INTERLEAVED: signal={p_s_final:.3f}, garbage={p_g_final:.3f}  |  "
-            f"Difference: Δsignal={p_s_final-n_s_final:+.3f}, Δgarbage={p_g_final-n_g_final:+.3f}",
+            f"NAIVE: signal={n_s_final:.3f}, |garbage|={n_g_final:.3f}  |  "
+            f"INTERLEAVED: signal={p_s_final:.3f}, |garbage|={p_g_final:.3f}  |  "
+            f"Δsignal={p_s_final-n_s_final:+.3f}, Δ|garbage|={p_g_final-n_g_final:+.3f}",
             ha="center", fontsize=10, bbox=dict(boxstyle="round,pad=0.6",
             facecolor="#f0f0f0", alpha=0.9, edgecolor="#999"), family="monospace")
     
@@ -344,33 +353,29 @@ destructively interfere and cancel exactly — no contamination.
 
     with st.expander("📊 How to read this visualization", expanded=True):
         st.markdown("""
+**Key idea:** Garbage doesn't just *grow*—its *direction* matters for interference.
+
 **Left panel (Naive):** Repeated $U_A$ only
-- Orange line traces the full state through signal–garbage space.
-- At each step, $U_A$ causes mixing: signal stays roughly constant, garbage GROWS.  
-- Arrows show direction of state evolution.
+- Orange trajectory climbs monotonically (garbage always leaks in the SAME direction).
 - Colored dots: state after each application (red = garbage-rich, blue = signal-rich).
-- Step numbers label each point.
-- Blue dashed line: projection down to x-axis shows what we'd measure (signal amplitude).
-- **Problem:** Garbage accumulates in the SAME direction repeatedly → grows unbounded.
+- Blue X: where the signal is measured after post-selection.
+- **Problem:** Since garbage always leaks in the same direction, it compounds: magnitudes keep growing.
 
-**Right panel (Interleaved):** $U_A$ with phase gates $D(\\phi_j)$
-- Green line shows how phase steering redirects garbage at each step.
-- Phase gate $D(\\phi)=\\mathrm{diag}(e^{i\\phi}, e^{-i\\phi})$ applies opposite rotations to signal and garbage.
-- This rotates where the garbage "leaks" to—each step the garbage goes to a *different* direction.
-- As a result: garbage oscillates rather than accumulates.
-- **Benefit:** Signal stays stronger, garbage stays small!
+**Right panel (Interleaved):** $U_A$ with varying phase gates $D(\\phi_j)$
+- Phase $\\phi_j$ rotates the direction that garbage leaks to.
+- Green trajectory shows this: garbage leaks in *different* directions each step.
+- The small gray arrows (in complex plane) show the direction of garbage at each step—they rotate!
+- **Benefit:** When garbage leaks in different directions, the real and imaginary parts can oscillate and partially cancel.
+- Result: |garbage| stays much smaller than naive case.
 
-**Key comparison:** Look at how far UP (garbage direction) each trajectory reaches:
-- **Naive:** trajectory climbs higher and higher (garbage accumulates)
-- **Interleaved:** trajectory curves back (garbage is redirected, doesn't accumulate monotonically)
-
-The bottom summary shows signal and garbage magnitudes. Watch how **Δgarbage** becomes negative (interleaved keeps garbage smaller).
+**Bottom summary:** Shows $\\Delta|\\text{garbage}|$ = how much smaller the interleaved garbage is.  
+When this is negative, phase steering is *suppressing* garbage compared to naive.
         """)
 
     st.info(
-        "💡 **The QSVT insight:** Without phase gates, the block-encoding problem is that garbage "
-        "keeps leaking back in the same channel, compounding. Phase rotations act like angle adjustments "
-        "on a steering wheel—they rotate where the garbage goes, so instead of piling up, it oscillates and cancels."
+        "💡 **The QSVT insight:** Phase gates rotate garbage so it doesn't accumulate monotonically. "
+        "Without them, each $U_A$ pushes garbage further in the same direction. "
+        "With phase steering, garbage oscillates—the real and imaginary parts fight each other, reducing net magnitude."
     )
 
 
