@@ -68,7 +68,7 @@ classical optimization problem — the quantum algorithm alone is not enough.
 
     st.markdown("---")
 
-        st.markdown(r"""
+    st.markdown(r"""
 ### Paper-Informed Context (arXiv:2512.22163)
 
 - Recent results show that **higher-order finite differences** can outperform low-order methods
@@ -79,7 +79,7 @@ classical optimization problem — the quantum algorithm alone is not enough.
     **(1)** context updates, **(2)** paper-comparison slide updates, **(3)** optional code-level migration.
 """)
 
-        st.markdown("---")
+    st.markdown("---")
 
     # ── Full reference list ──
     st.markdown("### References")
