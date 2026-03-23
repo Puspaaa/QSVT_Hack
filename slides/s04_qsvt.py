@@ -112,26 +112,35 @@ def _draw_qsvt_intuition():
 def _evolve_state_2d(state, sigma, beta, apply_phase=False, phi=0.0):
     """Apply U_A (optionally with phase gate) to [signal, garbage] state.
     
-    Key insight: phase gates don't affect magnitudes (|e^{i phi} z| = |z|).
-    Instead, they control the DIRECTION garbage leaks.
+    Key insight: phase gates create OPPOSITE rotations on signal vs garbage.
+    - Signal couples to |0⟩: rotation by e^{i*phi}
+    - Garbage couples to |1⟩: rotation by e^{-i*phi}
     
-    Model: garbage leaks as e^{i * leak_angle}, where leak_angle depends on phase.
-    - Without phase: leak_angle is fixed → garbage accumulates monotonically
-    - With phase: leak_angle varies → garbage oscillates (real parts can cancel)
+    This opposite rotation creates destructive interference for garbage while
+    keeping signal constructive.
     """
-    s_real, g_real = np.real(state[0]), np.real(state[1])
+    s_val = state[0]
+    g_prev = state[1]  # Full complex garbage state
     
-    # U_A causes signal to decrease slightly, garbage to leak in
-    # Leak angle: without phase it's fixed (0), with phase it varies
-    leak_angle = phi if apply_phase else 0.0
+    # U_A: leak signal magnitude to garbage
+    leak_magnitude = beta * np.real(s_val)
     
-    # Garbage contribution: leaks in direction determined by leak_angle
-    garbage_leak = beta * s_real * np.exp(1j * leak_angle)
+    # Phase gate creates opposite rotations:
+    # Signal: +phi, Garbage: -phi for destructive interference
+    if apply_phase:
+        phase_rotation = np.exp(1j * phi)
+        antirotation = np.exp(-1j * phi)
+    else:
+        phase_rotation = 1.0
+        antirotation = 1.0
     
-    s_next = sigma * s_real - 0.1 * g_real  # small damping from existing garbage
-    g_next = g_real + garbage_leak  # accumulate new garbage in direction determined by phase
+    # Signal decays with feedback from garbage, then rotates
+    s_next = (sigma * np.real(s_val) - 0.1 * np.real(g_prev)) * phase_rotation
     
-    return np.array([s_next + 0.0j, g_next])
+    # Garbage accumulates leakage and receives opposite phase for destructive interference
+    g_next = g_prev * antirotation + leak_magnitude * antirotation
+    
+    return np.array([s_next, g_next])
 
 
 def _simulate_trajectories_2d(depth, sigma, phase_span):
