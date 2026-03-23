@@ -436,7 +436,7 @@ exact realisation of whatever polynomial we choose.
         the angles $\{\phi_j\}$ are found by **classical preprocessing**.
         """)
 
-     st.markdown(r"""
+    st.markdown(r"""
 ### How The Phase Angles Are Actually Chosen
 
 The angles are **not guessed**. They come from a classical compilation pipeline:
@@ -455,8 +455,8 @@ So angle synthesis is a **deterministic compiler step**:
 target function $\rightarrow$ polynomial $\rightarrow$ phase sequence.
 """)
 
-     with st.expander("🔧 Practical Angle-Synthesis Workflow", expanded=False):
-          st.markdown(r"""
+    with st.expander("🔧 Practical Angle-Synthesis Workflow", expanded=False):
+        st.markdown(r"""
 Given a desired transform $f$, practitioners typically do:
 
 1. **Domain setup**: map singular values/eigenvalues into $[-1,1]$ via normalization.
