@@ -45,6 +45,9 @@ TOTAL = len(SLIDES)
 if "slide_idx" not in st.session_state:
     st.session_state.slide_idx = 0
 
+# Guard against stale indices after slide order/count changes.
+st.session_state.slide_idx = max(0, min(st.session_state.slide_idx, TOTAL - 1))
+
 
 def go_prev():
     if st.session_state.slide_idx > 0:
@@ -57,7 +60,7 @@ def go_next():
 
 
 def jump_to(idx):
-    st.session_state.slide_idx = idx
+    st.session_state.slide_idx = max(0, min(idx, TOTAL - 1))
 
 
 # ── Sidebar: slide outline ───────────────────────────────────────────────────
