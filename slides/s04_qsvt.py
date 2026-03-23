@@ -109,167 +109,157 @@ def _draw_qsvt_intuition():
     plt.close(fig)
 
 
-def _evolve_state_2d(state, sigma, beta, apply_phase=False, phi=0.0):
-    """Apply U_A (optionally with phase gate) to [signal, garbage] state.
-    
-    Key insight: phase gates create OPPOSITE rotations on signal vs garbage.
-    - Signal couples to |0⟩: rotation by e^{i*phi}
-    - Garbage couples to |1⟩: rotation by e^{-i*phi}
-    
-    This opposite rotation creates destructive interference for garbage while
-    keeping signal constructive.
+def _rotate_2d(vec, angle):
+    """Rotate a 2D vector by angle."""
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([c * vec[0] - s * vec[1], s * vec[0] + c * vec[1]])
+
+
+def _evolve_state_2d(state, theta, alpha, apply_phase=False, phi=0.0):
+    """Toy geometry for one query step.
+
+    State is [x, y, z]:
+    - (x, y) is the relevant signal plane
+    - z is out-of-plane garbage
+
+    Each U_A does two things:
+    1) rotates in-plane by theta
+    2) leaks amplitude out-of-plane by alpha
+
+    Interleaved phases change the leakage axis and rotate previous garbage,
+    allowing destructive interference in z.
     """
-    s_val = state[0]
-    g_prev = state[1]  # Full complex garbage state
-    
-    # U_A: leak signal magnitude to garbage
-    leak_magnitude = beta * np.real(s_val)
-    
-    # Phase gate creates opposite rotations:
-    # Signal: +phi, Garbage: -phi for destructive interference
+    x, y, z = state
+
+    # In-plane action: every query rotates by theta in the relevant plane.
+    xy_rot = _rotate_2d(np.array([x, y]), theta)
+
     if apply_phase:
-        phase_rotation = np.exp(1j * phi)
-        antirotation = np.exp(-1j * phi)
+        # Phase steering rotates the leakage axis in-plane.
+        leak_axis = np.array([np.cos(phi), np.sin(phi)])
+        leak = np.sin(alpha) * np.dot(xy_rot, leak_axis)
+        # Existing garbage rotates/sign-flips under phase sequence, enabling cancellation.
+        z_next = 0.55 * z + leak * np.cos(phi)
     else:
-        phase_rotation = 1.0
-        antirotation = 1.0
-    
-    # Signal decays with feedback from garbage, then rotates
-    s_next = (sigma * np.real(s_val) - 0.1 * np.real(g_prev)) * phase_rotation
-    
-    # Garbage accumulates leakage and receives opposite phase for destructive interference
-    g_next = g_prev * antirotation + leak_magnitude * antirotation
-    
-    return np.array([s_next, g_next])
+        # No phase steering: leakage always points along the same in-plane axis.
+        leak = np.sin(alpha) * xy_rot[0]
+        z_next = 0.98 * z + leak
+
+    # More out-of-plane weight means worse projected in-plane quality.
+    scale = max(0.05, 1.0 - 0.35 * abs(z_next))
+    xy_next = scale * xy_rot
+
+    return np.array([xy_next[0], xy_next[1], z_next])
 
 
 def _simulate_trajectories_2d(depth, sigma, phase_span):
-    """Track full state trajectory for both methods.
-    
-    Key difference:
-    - Naive: garbage always leaks in direction 0 → accumulates upward
-    - Interleaved: garbage leaks in directions that vary → oscillations
-    """
-    beta = np.sqrt(max(0.0, 1.0 - sigma**2))
-    
-    n_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
-    p_states = [np.array([1.0 + 0.0j, 0.0 + 0.0j])]
-    
-    # Phase schedule that oscillates
+    """Track naive vs interleaved trajectories in [x, y, z] geometry."""
+    theta = 0.35
+    alpha = np.arccos(np.clip(sigma, -1.0, 1.0))
+
+    n_states = [np.array([1.0, 0.0, 0.0])]
+    p_states = [np.array([1.0, 0.0, 0.0])]
+    ideal_states = [np.array([1.0, 0.0, 0.0])]
+
     if depth <= 1:
         phases = np.array([phase_span])
     else:
         t = np.linspace(0.0, 1.0, depth)
         phases = phase_span * np.cos(np.pi * t)
-    
+
     for idx in range(depth):
-        # Naive: phase is always 0, garbage leaks in same direction
-        n_next = _evolve_state_2d(n_states[-1], sigma, beta, apply_phase=False)
-        n_states.append(n_next)
-        
-        # Interleaved: phase varies, garbage leaks in different directions
-        p_next = _evolve_state_2d(p_states[-1], sigma, beta, apply_phase=True, phi=phases[idx])
-        p_states.append(p_next)
-    
-    return np.array(n_states), np.array(p_states), phases
+        n_states.append(_evolve_state_2d(n_states[-1], theta, alpha, apply_phase=False))
+        p_states.append(_evolve_state_2d(p_states[-1], theta, alpha, apply_phase=True, phi=phases[idx]))
+
+        # Ideal action: only in-plane rotation, no out-of-plane leakage.
+        ideal_xy = _rotate_2d(ideal_states[-1][:2], theta)
+        ideal_states.append(np.array([ideal_xy[0], ideal_xy[1], 0.0]))
+
+    return np.array(n_states), np.array(p_states), np.array(ideal_states), phases, theta, alpha
 
 
 def _draw_geometry_frame(depth, frame, sigma, phase_span):
-    """Draw 2D signal-garbage geometry showing accumulation with and without phase steering."""
-    n_states, p_states, phases = _simulate_trajectories_2d(depth, sigma, phase_span)
+    """Draw projected in-plane trajectories with out-of-plane leakage diagnostics."""
+    n_states, p_states, ideal_states, phases, theta, alpha = _simulate_trajectories_2d(depth, sigma, phase_span)
     k = min(frame + 1, depth)
-    
+
     fig, axes = plt.subplots(1, 2, figsize=(14, 6), gridspec_kw={"wspace": 0.3})
-    
+
     for ax_idx, (ax, label, states, col_traj, col_arrow) in enumerate([
         (axes[0], "Naive: repeated $U_A$", n_states, "#e67e22", "#ff6b35"),
         (axes[1], "Interleaved: $D(\\phi_j)U_A$", p_states, "#2e7d32", "#1b5e20"),
     ]):
-        # Draw axis labels and grid
         ax.axhline(0, color="#999", linewidth=0.8, alpha=0.5)
         ax.axvline(0, color="#999", linewidth=0.8, alpha=0.5)
         ax.grid(True, alpha=0.2)
         ax.set_aspect("equal")
-        
-        # Extract real and imaginary parts of garbage for 2D plot
-        # Signal is on x-axis, garbage oscillates in complex plane
-        s_vals = np.real(states[:k+1, 0])
-        g_real = np.real(states[:k+1, 1])
-        g_imag = np.imag(states[:k+1, 1])
-        g_mag = np.sqrt(g_real**2 + g_imag**2)
-        
-        # Plot trajectory in (signal, garbage-magnitude) space
-        ax.plot(s_vals, g_mag, "-", color=col_traj, linewidth=3, alpha=0.8, 
-               label="Full state evolution", zorder=2)
-        
-        # Draw arrows at each step
-        for i in range(k):
-            if i < len(states) - 1:
-                x0, y0 = s_vals[i], g_mag[i]
-                x1, y1 = s_vals[i+1], g_mag[i+1]
-                dx, dy = x1 - x0, y1 - y0
-                if np.sqrt(dx**2 + dy**2) > 0.005:
-                    ax.arrow(x0, y0, dx*0.85, dy*0.85, head_width=0.03, head_length=0.04,
-                            fc=col_arrow, ec=col_arrow, alpha=0.9, zorder=3, linewidth=1.2)
-        
-        # Plot dots at each step
-        for i in range(k+1):
-            s_mag = abs(s_vals[i])
-            total = s_mag + g_mag[i] + 0.001
-            ratio = s_mag / total
-            dot_color = plt.cm.RdYlBu(0.7 + 0.3*ratio)  
-            ax.plot(s_vals[i], g_mag[i], 'o', color=dot_color, markersize=7, 
-                   alpha=0.85, zorder=4, markeredgecolor="black", markeredgewidth=0.6)
-            ax.text(s_vals[i] + 0.02, g_mag[i] + 0.02, str(i), fontsize=7, alpha=0.6)
-        
-        # For interleaved, show garbage direction field
-        if ax_idx == 1:
-            for i in range(k):
-                if g_mag[i] > 0.01:
-                    ax.arrow(s_vals[i], 0.01, g_real[i]*0.15, g_imag[i]*0.15,
-                            head_width=0.015, head_length=0.015,
-                            fc="#666", ec="#999", alpha=0.25, zorder=1, linewidth=0.8)
-        
-        # Post-selection projection
-        current_s = s_vals[k]
-        current_g = g_mag[k]
-        ax.plot([current_s, current_s], [current_g, 0], "--", color="#4a90d9", 
-               linewidth=2, alpha=0.6, label="Measure signal", zorder=1)
-        ax.plot(current_s, 0, "X", color="#4a90d9", markersize=12, alpha=0.85, 
-               markeredgewidth=2, markeredgecolor="navy", zorder=5)
-        
-        # Labels and limits
-        ax.set_xlabel("Signal amplitude (real)", fontsize=11, fontweight="bold")
-        ax.set_ylabel("Garbage magnitude |G|", fontsize=11, fontweight="bold")
+
+        # Unit circle shows the ideal in-plane manifold.
+        circle = plt.Circle((0, 0), 1.0, fill=False, linestyle="--", linewidth=1.0, color="#888", alpha=0.5)
+        ax.add_patch(circle)
+
+        xy = states[:k+1, :2]
+        z_abs = np.abs(states[:k+1, 2])
+        ideal_xy = ideal_states[:k+1, :2]
+
+        ax.plot(ideal_xy[:, 0], ideal_xy[:, 1], "--", color="#4a90d9", linewidth=2, alpha=0.8,
+                label="Ideal in-plane target")
+        ax.plot(xy[:, 0], xy[:, 1], "-", color=col_traj, linewidth=3, alpha=0.9,
+                label="Projected state after each step")
+
+        # Step markers are colored by out-of-plane leakage magnitude.
+        z_norm = z_abs / (np.max(z_abs) + 1e-9)
+        for i in range(k + 1):
+            dot_color = plt.cm.YlOrRd(0.25 + 0.7 * z_norm[i])
+            ax.plot(xy[i, 0], xy[i, 1], "o", color=dot_color, markersize=7,
+                    alpha=0.9, zorder=4, markeredgecolor="black", markeredgewidth=0.5)
+            ax.text(xy[i, 0] + 0.03, xy[i, 1] + 0.03, str(i), fontsize=7, alpha=0.7)
+            ax.plot([ideal_xy[i, 0], xy[i, 0]], [ideal_xy[i, 1], xy[i, 1]],
+                    color=col_arrow, linewidth=1.0, alpha=0.35)
+
+        ax.plot(ideal_xy[k, 0], ideal_xy[k, 1], "*", color="#1f4db8", markersize=12,
+                label="Ideal final (in-plane)", zorder=5)
+        ax.plot(xy[k, 0], xy[k, 1], "X", color=col_traj, markersize=11,
+                markeredgecolor="black", markeredgewidth=1.0, zorder=6,
+                label="Projected final")
+
+        ax.set_xlabel("Relevant plane axis 1", fontsize=11, fontweight="bold")
+        ax.set_ylabel("Relevant plane axis 2", fontsize=11, fontweight="bold")
         ax.set_title(label, fontsize=12, fontweight="bold", pad=10)
-        ax.legend(fontsize=9, loc="upper left")
-        
-        lim = max(0.2, max(np.max(np.abs(s_vals)), np.max(g_mag)) * 1.3)
-        ax.set_xlim(-0.05, lim)
-        ax.set_ylim(-0.05, lim)
-        
+        ax.legend(fontsize=8, loc="lower left")
+
+        ax.set_xlim(-1.15, 1.15)
+        ax.set_ylim(-1.15, 1.15)
+
+        z_curr = abs(states[k, 2])
+        err_curr = np.linalg.norm(states[k, :2] - ideal_states[k, :2])
+        ax.text(0.98, 0.98,
+                f"|z|={z_curr:.3f}\\nproj error={err_curr:.3f}",
+                transform=ax.transAxes, ha="right", va="top", fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.85, edgecolor="#bbb"))
+
         if ax_idx == 1 and k > 0:
             ax.text(0.98, 0.02, f"$\\phi_j$ = {phases[k-1]:+.2f} rad",
                    transform=ax.transAxes, ha="right", va="bottom",
                    fontsize=10, bbox=dict(boxstyle="round,pad=0.5", 
                    facecolor="white", alpha=0.85, edgecolor="#bbb"))
-    
+
     # Summary stats
-    n_s_final = abs(n_states[k, 0])
-    n_g_final = abs(n_states[k, 1])
-    p_s_final = abs(p_states[k, 0])
-    p_g_final = abs(p_states[k, 1])
-    
+    n_z_final = abs(n_states[k, 2])
+    p_z_final = abs(p_states[k, 2])
+    n_proj_err = np.linalg.norm(n_states[k, :2] - ideal_states[k, :2])
+    p_proj_err = np.linalg.norm(p_states[k, :2] - ideal_states[k, :2])
+
     fig.text(0.5, 0.08,
             f"Step {k}/{depth} | "
-            f"NAIVE: signal={n_s_final:.3f}, |garbage|={n_g_final:.3f}  |  "
-            f"INTERLEAVED: signal={p_s_final:.3f}, |garbage|={p_g_final:.3f}  |  "
-            f"Δsignal={p_s_final-n_s_final:+.3f}, Δ|garbage|={p_g_final-n_g_final:+.3f}",
+            f"NAIVE: |z|={n_z_final:.3f}, proj_err={n_proj_err:.3f}  |  "
+            f"INTERLEAVED: |z|={p_z_final:.3f}, proj_err={p_proj_err:.3f}  |  "
+            f"Δ|z|={p_z_final-n_z_final:+.3f}, Δerr={p_proj_err-n_proj_err:+.3f}",
             ha="center", fontsize=10, bbox=dict(boxstyle="round,pad=0.6",
             facecolor="#f0f0f0", alpha=0.9, edgecolor="#999"), family="monospace")
-    
+
     fig.suptitle(
-        f"QSVT: Garbage Accumulation Without vs With Phase Steering (σ={sigma:.2f})",
+        f"QSVT Geometry: In-Plane Rotation (θ={theta:.2f}) + Out-of-Plane Leakage (α={alpha:.2f})",
         fontsize=13, fontweight="bold", y=0.98
     )
     fig.tight_layout(rect=[0, 0.12, 1, 0.96])
@@ -330,8 +320,8 @@ destructively interfere and cancel exactly — no contamination.
     st.markdown("---")
     st.markdown("### Animated Intuition: Post-Selection & Phase Steering")
     st.caption(
-        "2D state-space visualization: X-axis is signal amplitude, Y-axis is garbage amplitude. "
-        "See how U_A mixes them, and how phase gates keep them separated."
+        "State is modeled as (x, y, z): (x, y) is the relevant signal plane, z is out-of-plane garbage. "
+        "Each $U_A$ rotates by $\\theta$ in-plane and leaks by $\\alpha$ out-of-plane; measurement projects back to the plane."
     )
 
     c1, c2, c3 = st.columns([1, 1, 1])
@@ -362,29 +352,28 @@ destructively interfere and cancel exactly — no contamination.
 
     with st.expander("📊 How to read this visualization", expanded=True):
         st.markdown("""
-**Key idea:** Garbage doesn't just *grow*—its *direction* matters for interference.
+**Key idea:** Repeated queries push amplitude out of the relevant plane; post-selection only keeps the in-plane projection.
 
-**Left panel (Naive):** Repeated $U_A$ only
-- Orange trajectory climbs monotonically (garbage always leaks in the SAME direction).
-- Colored dots: state after each application (red = garbage-rich, blue = signal-rich).
-- Blue X: where the signal is measured after post-selection.
-- **Problem:** Since garbage always leaks in the same direction, it compounds: magnitudes keep growing.
+**Blue dashed path (both panels):** ideal trajectory if evolution stayed in-plane.
 
-**Right panel (Interleaved):** $U_A$ with varying phase gates $D(\\phi_j)$
-- Phase $\\phi_j$ rotates the direction that garbage leaks to.
-- Green trajectory shows this: garbage leaks in *different* directions each step.
-- The small gray arrows (in complex plane) show the direction of garbage at each step—they rotate!
-- **Benefit:** When garbage leaks in different directions, the real and imaginary parts can oscillate and partially cancel.
-- Result: |garbage| stays much smaller than naive case.
+**Left panel (Naive):** repeated $U_A$ with no interleaved phases
+- The projected trajectory drifts away from the dashed ideal path.
+- $|z|$ grows because leakage always reinforces out-of-plane garbage.
+- Projection error increases, so the measured in-plane vector degrades.
 
-**Bottom summary:** Shows $\\Delta|\\text{garbage}|$ = how much smaller the interleaved garbage is.  
-When this is negative, phase steering is *suppressing* garbage compared to naive.
+**Right panel (Interleaved):** $D(\\phi_j)U_A$
+- Phase rotations change leakage direction each step.
+- Out-of-plane pieces interfere destructively, so $|z|$ stays smaller.
+- The projected trajectory remains closer to the ideal dashed path.
+
+**Bottom summary:**  
+$\\Delta|z| < 0$ and $\\Delta\\text{err} < 0$ mean phase steering is improving the projected final vector.
         """)
 
     st.info(
-        "💡 **The QSVT insight:** Phase gates rotate garbage so it doesn't accumulate monotonically. "
-        "Without them, each $U_A$ pushes garbage further in the same direction. "
-        "With phase steering, garbage oscillates—the real and imaginary parts fight each other, reducing net magnitude."
+        "💡 **The QSVT insight:** Every query rotates the useful state in-plane but also leaks amplitude out-of-plane. "
+        "Without phase steering, that leakage compounds and projection back to the plane gives the wrong vector. "
+        "With interleaved phases, out-of-plane leakage destructively interferes, so projection recovers a much more accurate in-plane state."
     )
 
 
@@ -461,7 +450,7 @@ exact realisation of whatever polynomial we choose.
 """)
 
     st.caption(
-        "Here $p$ is initial success probability, $\kappa$ is condition number, and $\epsilon$ is approximation error."
+        r"Here $p$ is initial success probability, $\kappa$ is condition number, and $\epsilon$ is approximation error."
     )
 
     key_concept(
