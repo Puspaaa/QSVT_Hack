@@ -253,6 +253,20 @@ so only three unitaries are needed. Here $S$ is cyclic shift:
 $S|j\rangle = |j+1 \bmod N\rangle$.
 """)
 
+    with st.expander("Where do the LCU coefficients come from?"):
+        st.markdown(r"""
+The central-difference discretisation of $\nu \,\partial^2 u / \partial x^2$ gives:
+
+$$u_j^{n+1} = u_j^n + \frac{\nu \Delta t}{\Delta x^2}\bigl(u_{j+1} - 2u_j + u_{j-1}\bigr)$$
+
+In matrix form: $A = a_0\,I + a_+\,S + a_-\,S^\dagger$ where
+
+$$a_0 = 1 - \frac{2\nu\Delta t}{\Delta x^2}, \qquad a_+ = a_- = \frac{\nu\Delta t}{\Delta x^2}$$
+
+The CFL stability condition ensures $a_0 \ge 0$, so the normalisation factor
+$\alpha = |a_0| + |a_+| + |a_-| = 1$ — the LCU comes for free with no extra overhead.
+""")
+
     st.markdown("---")
 
     # ── The repeated-application problem ──

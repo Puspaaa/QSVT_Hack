@@ -164,7 +164,9 @@ Why do these constraints appear at all?
 
 - **Definite parity:** the alternating QSP/QSVT sequence built from $U_A$ and $U_A^\dagger$ with phase rotations has a built-in symmetry.
     That symmetry makes a single sequence implement either an even or an odd polynomial channel.
-    A generic function is therefore split into even and odd parts and synthesized via two channels.
+    Concretely: the product $D(\phi_d)\,W\cdot D(\phi_{d-1})\,W^\dagger \cdots D(\phi_0)$ with alternating $W/W^\dagger$
+    forces even or odd symmetry in $\sigma$ — an even-degree product gives an even polynomial, odd gives odd.
+    To implement a general function, split it: $f = f_\text{even} + f_\text{odd}$, each needing a separate circuit.
 
 This is not a serious limitation — any function can be split:
 
