@@ -211,6 +211,13 @@ the solution has reached $T = m \cdot k \cdot \Delta t$.
         deg = int(k_steps + 8)
         if deg % 2 != 0:
             deg += 1
+        st.caption(
+            f"Polynomial degree d = {deg} (heuristic: k + 8). "
+            f"The target exp(k(|x|\u22121)) decays to "
+            f"exp(\u2212k) \u2248 {np.exp(-k_steps):.1e}; the extra 8 terms "
+            f"absorb Chebyshev boundary approximation error. "
+            f"For rigorous bounds, see the Jacobi-Anger estimate in Slide 5."
+        )
         with st.spinner(
                 "Solving Chebyshev optimisation + QSP angle finding …"):
             try:
@@ -544,6 +551,26 @@ the solution has reached $T = m \cdot k \cdot \Delta t$.
     plt.close(fig)
     status.markdown("**Simulation complete.**")
     pbar.progress(1.0)
+
+    # ── Postselection overhead summary ─────────────────────────────────
+    expected_rate = a_val ** (2 * k_steps) if a_val > 0 else 0.0
+    st.markdown("#### Postselection Overhead")
+    ps_c1, ps_c2 = st.columns(2)
+    with ps_c1:
+        st.metric("Expected postselection rate",
+                  f"{expected_rate:.1%}",
+                  help="Theoretical success probability per run")
+    with ps_c2:
+        st.metric("Effective shots per snapshot",
+                  f"~{int(shots * expected_rate):,}",
+                  help="Expected valid shots after postselection")
+    st.caption(
+        f"Success probability ≈ $(a_0)^{{2k}}$ = ({a_val:.4f})$^{{{2*k_steps}}}$ "
+        f"= {expected_rate:.2%} per run. "
+        f"With {shots:,} shots, ~{int(shots * expected_rate):,} survive postselection. "
+        f"Amplitude amplification could reduce shot overhead from $O(1/\\varepsilon^2)$ "
+        f"to $O(1/\\varepsilon)$."
+    )
 
     # ══════════════════════════════════════════════════════════════════════
     #  RESOURCE COMPARISON TABLE

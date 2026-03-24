@@ -27,10 +27,16 @@ PDEs and numerical integration map directly to the QSVT framework:
 - Advection = diagonal in Fourier space (QFT)
 - Integration = inner product with polynomial domain indicator
 
-**3. The pipeline is complete but the advantage is asymptotic**  
+**3. The pipeline is complete but the advantage is asymptotic**
 Current quantum hardware is too noisy for practical advantage. Our simulator
 demonstrates correctness of the algorithm. The exponential speedup activates
 when $N = 2^n$ is large and we need observables, not full state readout.
+
+*Concrete example:* for our 32-point grid, classical FD costs ~96 flops/step
+and stores a 32-vector.  The quantum circuit uses 8 qubits but needs ~100K
+shots per snapshot.  The crossover where quantum wins requires
+$N \gg 10^6$ grid points with observable-only output (e.g. computing
+$\int f(x)\,dx$ via amplitude estimation, not reading the full state).
 
 **4. Classical preprocessing is essential**  
 Computing QSVT angles ($\{\phi_j\}$) from the target polynomial is a nontrivial
